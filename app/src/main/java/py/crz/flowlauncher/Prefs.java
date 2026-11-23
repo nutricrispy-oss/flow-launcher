@@ -66,6 +66,41 @@ final class Prefs {
     String fondosRepo() { return sp.getString("fondos_repo", OnlineWallpapers.DEFAULT_REPO); }
     void setFondosRepo(String v) { sp.edit().putString("fondos_repo", v).apply(); }
 
+    // ---- v1.4 ----
+    boolean autoUpdate() { return sp.getBoolean("auto_update", true); }
+    void setAutoUpdate(boolean v) { sp.edit().putBoolean("auto_update", v).apply(); }
+    long lastUpdateCheck() { return sp.getLong("upd_check", 0); }
+    void setLastUpdateCheck(long v) { sp.edit().putLong("upd_check", v).apply(); }
+
+    boolean autoClean() { return sp.getBoolean("auto_clean", false); }
+    void setAutoClean(boolean v) { sp.edit().putBoolean("auto_clean", v).apply(); }
+
+    /** 0 digital, 1 con segundos, 2 de 12 horas, 3 analógico, 4 minimalista, 5 retro LED */
+    int clockStyle() { return sp.getInt("clock_style", 0); }
+    void setClockStyle(int v) { sp.edit().putInt("clock_style", v).apply(); }
+
+    /** 0 pequeño, 1 normal, 2 grande, 3 muy grande */
+    int iconSize() { return sp.getInt("icon_size", 1); }
+    void setIconSize(int v) { sp.edit().putInt("icon_size", v).apply(); }
+
+    boolean showWeather() { return sp.getBoolean("weather", true); }
+    void setShowWeather(boolean v) { sp.edit().putBoolean("weather", v).apply(); }
+
+    boolean showRecents() { return sp.getBoolean("recents_on", true); }
+    void setShowRecents(boolean v) { sp.edit().putBoolean("recents_on", v).apply(); }
+
+    List<String> recents() { return list("recents"); }
+
+    void addRecent(String pkg) {
+        List<String> r = recents();
+        r.remove(pkg);
+        r.add(0, pkg);
+        while (r.size() > 12) r.remove(r.size() - 1);
+        putList("recents", r);
+    }
+
+    void clearRecents() { putList("recents", new ArrayList<String>()); }
+
     boolean favInit() { return sp.getBoolean("fav_init", false); }
     void setFavInit(boolean v) { sp.edit().putBoolean("fav_init", v).apply(); }
 
@@ -121,6 +156,12 @@ final class Prefs {
         o.put("boot", bootStart());
         o.put("guard", guard());
         o.put("fondos_repo", fondosRepo());
+        o.put("auto_update", autoUpdate());
+        o.put("auto_clean", autoClean());
+        o.put("clock_style", clockStyle());
+        o.put("icon_size", iconSize());
+        o.put("weather", showWeather());
+        o.put("recents_on", showRecents());
         o.put("favorites", new JSONArray(favorites()));
         o.put("hidden", new JSONArray(hidden()));
         o.put("locked", new JSONArray(locked()));
@@ -142,6 +183,12 @@ final class Prefs {
         e.putBoolean("boot", o.optBoolean("boot", false));
         e.putBoolean("guard", o.optBoolean("guard", true));
         e.putString("fondos_repo", o.optString("fondos_repo", OnlineWallpapers.DEFAULT_REPO));
+        e.putBoolean("auto_update", o.optBoolean("auto_update", true));
+        e.putBoolean("auto_clean", o.optBoolean("auto_clean", false));
+        e.putInt("clock_style", o.optInt("clock_style", 0));
+        e.putInt("icon_size", o.optInt("icon_size", 1));
+        e.putBoolean("weather", o.optBoolean("weather", true));
+        e.putBoolean("recents_on", o.optBoolean("recents_on", true));
         e.putString("favorites", arr(o, "favorites"));
         e.putString("hidden", arr(o, "hidden"));
         e.putString("locked", arr(o, "locked"));

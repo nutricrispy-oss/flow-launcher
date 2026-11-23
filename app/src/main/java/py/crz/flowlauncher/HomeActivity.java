@@ -54,6 +54,8 @@ public class HomeActivity extends Activity {
 
     /** Se pone en true cuando hay que volver a leer las apps instaladas. */
     static volatile boolean needsReload = true;
+    /** Se pone en true al cambiar la ciudad del clima. */
+    static volatile boolean weatherDirty = false;
 
     private Prefs prefs;
     private LauncherTheme t;
@@ -63,7 +65,13 @@ public class HomeActivity extends Activity {
     private ScrollView scroll;
     private LinearLayout content, buttonBox, favRow;
     private GridLayout grid;
-    private TextView clock, date, net, favTitle, allTitle;
+    private TextView clock, ampm, date, net, favTitle, allTitle, recTitle;
+    private LinearLayout clockBox, weatherBox, recRow;
+    private HorizontalScrollView recScroll;
+    private AnalogClockView analog;
+    private TextView wIcon, wTemp, wDetail;
+    private int builtClockStyle = -1;
+    private long lastClean, lastWeatherTry;
 
     private final List<AppItem> apps = new ArrayList<>();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -92,7 +100,8 @@ public class HomeActivity extends Activity {
         @Override
         public void run() {
             updateClock();
-            handler.postDelayed(this, 15000);
+            int st = prefs.clockStyle();
+            handler.postDelayed(this, (st == 1 || st == 3) ? 1000 : 15000);
         }
     };
 
@@ -132,8 +141,10 @@ public class HomeActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setClipChildren(false);
-        clock = Ui.text(this, "", 46, Color.WHITE, true);
-        header.addView(clock);
+        clockBox = new LinearLayout(this);
+        clockBox.setOrientation(LinearLayout.HORIZONTAL);
+        clockBox.setGravity(Gravity.CENTER_VERTICAL);
+        header.addView(clockBox);
         LinearLayout dc = new LinearLayout(this);
         dc.setOrientation(LinearLayout.VERTICAL);
         dc.setPadding(Ui.dp(this, 20), 0, 0, 0);
@@ -142,6 +153,24 @@ public class HomeActivity extends Activity {
         dc.addView(date);
         dc.addView(net);
         header.addView(dc);
+
+        // Clima
+        weatherBox = new LinearLayout(this);
+        weatherBox.setOrientation(LinearLayout.HORIZONTAL);
+        weatherBox.setGravity(Gravity.CENTER_VERTICAL);
+        weatherBox.setPadding(Ui.dp(this, 32), 0, 0, 0);
+        wIcon = Ui.text(this, "", 30, Color.WHITE, false);
+        weatherBox.addView(wIcon);
+        LinearLayout wc = new LinearLayout(this);
+        wc.setOrientation(LinearLayout.VERTICAL);
+        wc.setPadding(Ui.dp(this, 10), 0, 0, 0);
+        wTemp = Ui.text(this, "", 22, Color.WHITE, true);
+        wDetail = Ui.text(this, "", 13, Color.WHITE, false);
+        wc.addView(wTemp);
+        wc.addView(wDetail);
+        weatherBox.addView(wc);
+        weatherBox.setVisibility(View.GONE);
+        header.addView(weatherBox);
         header.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
         buttonBox = new LinearLayout(this);
         buttonBox.setOrientation(LinearLayout.HORIZONTAL);
@@ -165,6 +194,22 @@ public class HomeActivity extends Activity {
         favRow.setPadding(0, Ui.dp(this, 12), Ui.dp(this, 24), Ui.dp(this, 12));
         favScroll.addView(favRow);
         content.addView(favScroll);
+
+        recTitle = Ui.text(this, "RECIENTES", 14, Color.WHITE, true);
+        recTitle.setLetterSpacing(0.08f);
+        recTitle.setPadding(Ui.dp(this, 10), Ui.dp(this, 6), 0, 0);
+        content.addView(recTitle);
+        recScroll = new HorizontalScrollView(this);
+        recScroll.setHorizontalScrollBarEnabled(false);
+        recScroll.setClipChildren(false);
+        recScroll.setClipToPadding(false);
+        recRow = new LinearLayout(this);
+        recRow.setOrientation(LinearLayout.HORIZONTAL);
+        recRow.setClipChildren(false);
+        recRow.setClipToPadding(false);
+        recRow.setPadding(0, Ui.dp(this, 12), Ui.dp(this, 24), Ui.dp(this, 12));
+        recScroll.addView(recRow);
+        content.addView(recScroll);
 
         allTitle = Ui.text(this, "TODAS LAS APLICACIONES", 14, Color.WHITE, true);
         allTitle.setLetterSpacing(0.08f);
@@ -228,6 +273,75 @@ public class HomeActivity extends Activity {
         if (needsReload || apps.isEmpty()) reload();
         else render();
         maybeShowHomeHint();
+        updateWeather(weatherDirty);
+        weatherDirty = false;
+        autoClean();
+        autoUpdateCheck();
+    }
+
+    // ------------------------------------------------------------------ Tareas automáticas
+
+    private void autoClean() {
+        if (!prefs.autoClean()) return;
+        long now = System.currentTimeMillis();
+        if (now - lastClean < 60000) return;
+        lastClean = now;
+        final Context app = getApplicationContext();
+        try {
+            executor.execute(() -> Cleaner.killBackground(app));
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void autoUpdateCheck() {
+        if (!Updater.shouldAutoCheck(this, prefs)) return;
+        prefs.setLastUpdateCheck(System.currentTimeMillis());
+        final int current = Updater.currentVersionCode(this);
+        try {
+            executor.execute(() -> {
+                final Updater.Release r = Updater.latest();
+                if (r == null || r.versionCode <= current) return;
+                runOnUiThread(() -> {
+                    if (!isFinishing() && hasWindowFocus()) Updater.offer(this, r);
+                });
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void showWeather(Weather.Now n) {
+        if (n == null) return;
+        wIcon.setText(Weather.icon(n.code));
+        wTemp.setText(n.temp + "°  " + Weather.text(n.code));
+        wDetail.setText(n.city + "  ·  máx " + n.max + "°  mín " + n.min + "°");
+        weatherBox.setVisibility(View.VISIBLE);
+    }
+
+    /** Muestra el clima guardado y lo actualiza cada 30 minutos. */
+    private void updateWeather(boolean force) {
+        if (!prefs.showWeather()) {
+            weatherBox.setVisibility(View.GONE);
+            return;
+        }
+        Weather.Now n = Weather.cached(this);
+        showWeather(n);
+        long now = System.currentTimeMillis();
+        boolean stale = n == null || now - n.time > 30 * 60 * 1000;
+        if (!force && (!stale || now - lastWeatherTry < 5 * 60 * 1000)) return;
+        lastWeatherTry = now;
+        final Context app = getApplicationContext();
+        try {
+            executor.execute(() -> {
+                try {
+                    final Weather.Now fresh = Weather.fetch(app);
+                    runOnUiThread(() -> {
+                        if (!isFinishing() && prefs.showWeather()) showWeather(fresh);
+                    });
+                } catch (Exception ignored) {
+                }
+            });
+        } catch (Exception ignored) {
+        }
     }
 
     /** Si el equipo no deja usar Flow Launcher como predeterminado, ofrece activar el guardián. */
@@ -325,8 +439,12 @@ public class HomeActivity extends Activity {
             boolean lightTheme = Color.red(t.text) < 128;
             dimView.setBackgroundColor(lightTheme ? Color.argb(a, 255, 255, 255) : Color.argb(a, 0, 0, 0));
         }
-        clock.setTextColor(t.text);
+        buildClock();
         date.setTextColor(t.subtext);
+        wIcon.setTextColor(t.text);
+        wTemp.setTextColor(t.text);
+        wDetail.setTextColor(t.subtext);
+        recTitle.setTextColor(t.accent);
         net.setTextColor(t.subtext);
         favTitle.setTextColor(t.accent);
         allTitle.setTextColor(t.accent);
@@ -356,10 +474,65 @@ public class HomeActivity extends Activity {
 
     // ------------------------------------------------------------------ Reloj y red
 
+    /** Arma el reloj según el estilo elegido en Ajustes. */
+    private void buildClock() {
+        int st = prefs.clockStyle();
+        if (st != builtClockStyle) {
+            clockBox.removeAllViews();
+            clock = null;
+            ampm = null;
+            analog = null;
+            if (st == 3) {
+                analog = new AnalogClockView(this);
+                int s = Ui.dp(this, 78);
+                clockBox.addView(analog, new LinearLayout.LayoutParams(s, s));
+            } else {
+                clock = Ui.text(this, "", 46, Color.WHITE, true);
+                clockBox.addView(clock);
+                if (st == 1) clock.setTextSize(40);
+                if (st == 4) {
+                    clock.setTextSize(58);
+                    clock.setTypeface(Typeface.create("sans-serif-thin", Typeface.NORMAL));
+                }
+                if (st == 5) {
+                    clock.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+                    clock.setTextSize(44);
+                    clock.setLetterSpacing(0.12f);
+                    clock.setPadding(Ui.dp(this, 14), Ui.dp(this, 2), Ui.dp(this, 14), Ui.dp(this, 2));
+                }
+                if (st == 2) {
+                    ampm = Ui.text(this, "", 18, Color.WHITE, true);
+                    ampm.setPadding(Ui.dp(this, 6), Ui.dp(this, 10), 0, 0);
+                    clockBox.addView(ampm);
+                }
+            }
+            builtClockStyle = st;
+        }
+        if (clock != null) {
+            clock.setTextColor(st == 5 ? t.accent : t.text);
+            clock.setBackground(st == 5 ? Ui.rounded(0x55000000, Ui.dp(this, 10), Ui.dp(this, 2),
+                    (t.accent & 0x00FFFFFF) | 0x88000000) : null);
+            if (st == 5) clock.setShadowLayer(Ui.dp(this, 8), 0, 0, t.accent);
+            else clock.setShadowLayer(0, 0, 0, 0);
+        }
+        if (ampm != null) ampm.setTextColor(t.subtext);
+        if (analog != null) analog.setColors(t.text, t.accent);
+        updateClock();
+    }
+
     private void updateClock() {
-        if (clock == null) return;
+        if (clockBox == null || date == null) return;
         Date now = new Date();
-        clock.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
+        int st = prefs.clockStyle();
+        if (clock != null) {
+            String pattern = st == 1 ? "HH:mm:ss" : st == 2 ? "h:mm" : "HH:mm";
+            clock.setText(new SimpleDateFormat(pattern, Locale.getDefault()).format(now));
+        }
+        if (ampm != null) {
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            ampm.setText(cal.get(java.util.Calendar.AM_PM) == java.util.Calendar.AM ? "a. m." : "p. m.");
+        }
+        if (analog != null) analog.invalidate();
         String d = new SimpleDateFormat("EEEE d 'de' MMMM", new Locale("es", "PY")).format(now);
         if (d.length() > 0) d = Character.toUpperCase(d.charAt(0)) + d.substring(1);
         date.setText(d);
@@ -454,7 +627,7 @@ public class HomeActivity extends Activity {
             if (a == null || hidden.contains(k)) continue;
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, -2);
             lp.setMargins(gap / 2, 0, gap / 2, 0);
-            favRow.addView(makeTile(a, tileW, tileH, true, locked.contains(k)), lp);
+            favRow.addView(makeTile(a, tileW, tileH, "fav:", locked.contains(k)), lp);
             favCount++;
         }
         if (favCount == 0) {
@@ -464,6 +637,22 @@ public class HomeActivity extends Activity {
             hint.setPadding(gap / 2, Ui.dp(this, 8), 0, Ui.dp(this, 8));
             favRow.addView(hint);
         }
+
+        // Recientes
+        recRow.removeAllViews();
+        int recCount = 0;
+        if (prefs.showRecents()) {
+            for (String k : prefs.recents()) {
+                AppItem a = byPkg.get(k);
+                if (a == null || hidden.contains(k)) continue;
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, -2);
+                lp.setMargins(gap / 2, 0, gap / 2, 0);
+                recRow.addView(makeTile(a, tileW, tileH, "rec:", locked.contains(k)), lp);
+                recCount++;
+            }
+        }
+        recTitle.setVisibility(recCount > 0 ? View.VISIBLE : View.GONE);
+        recScroll.setVisibility(recCount > 0 ? View.VISIBLE : View.GONE);
 
         // Todas las apps
         List<AppItem> visible = new ArrayList<>();
@@ -482,7 +671,7 @@ public class HomeActivity extends Activity {
             lp.width = tileW;
             lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
             lp.setMargins(gap / 2, gap / 2, gap / 2, gap / 2);
-            grid.addView(makeTile(a, tileW, tileH, false, locked.contains(a.pkg)), lp);
+            grid.addView(makeTile(a, tileW, tileH, "app:", locked.contains(a.pkg)), lp);
         }
         allTitle.setText(loading && apps.isEmpty() ? "CARGANDO APLICACIONES…"
                 : "TODAS LAS APLICACIONES (" + visible.size() + ")");
@@ -493,7 +682,7 @@ public class HomeActivity extends Activity {
         View target = null;
         if (lastFocusTag != null) {
             target = content.findViewWithTag(lastFocusTag);
-            if (target == null && lastFocusTag.startsWith("fav:")) {
+            if (target == null && (lastFocusTag.startsWith("fav:") || lastFocusTag.startsWith("rec:"))) {
                 target = content.findViewWithTag("app:" + lastFocusTag.substring(4));
             }
         }
@@ -508,14 +697,14 @@ public class HomeActivity extends Activity {
         }
     }
 
-    private View makeTile(final AppItem a, int w, int h, final boolean fav, boolean isLocked) {
+    private View makeTile(final AppItem a, int w, int h, String tagPrefix, boolean isLocked) {
         final boolean always = prefs.alwaysLabels();
         final LinearLayout tile = new LinearLayout(this);
         tile.setOrientation(LinearLayout.VERTICAL);
         tile.setFocusable(true);
         tile.setClickable(true);
         tile.setClipChildren(false);
-        tile.setTag((fav ? "fav:" : "app:") + a.pkg);
+        tile.setTag(tagPrefix + a.pkg);
 
         final float r = Ui.dp(this, 10);
         final FrameLayout card = new FrameLayout(this);
@@ -531,7 +720,9 @@ public class HomeActivity extends Activity {
             iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
             if (a.icon != null) iv.setImageDrawable(a.icon);
             else iv.setImageResource(android.R.drawable.sym_def_app_icon);
-            int s = Math.round(h * 0.58f);
+            final float[] sizes = {0.40f, 0.58f, 0.74f, 0.90f};
+            int si = Math.max(0, Math.min(3, prefs.iconSize()));
+            int s = Math.round(h * sizes[si]);
             card.addView(iv, new FrameLayout.LayoutParams(s, s, Gravity.CENTER));
         }
         if (isLocked) {
@@ -578,6 +769,7 @@ public class HomeActivity extends Activity {
     private void open(AppItem a) {
         Runnable go = () -> {
             prefs.addUsage(a.pkg);
+            prefs.addRecent(a.pkg);
             if (!AppRepository.launch(this, a)) Ui.toast(this, "No se pudo abrir " + a.label);
         };
         if (prefs.locked().contains(a.pkg)) {

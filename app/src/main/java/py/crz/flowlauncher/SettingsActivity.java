@@ -73,6 +73,22 @@ public class SettingsActivity extends BaseActivity {
                     });
         }
 
+        row("Estilo del reloj", CLOCK_NAMES[Math.max(0, Math.min(CLOCK_NAMES.length - 1,
+                prefs.clockStyle()))], this::chooseClock);
+        row("Clima", prefs.showWeather() ? "Visible  ·  " + Weather.place(this).name : "Oculto", () -> {
+            prefs.setShowWeather(!prefs.showWeather());
+            render(focusedRow());
+        });
+        row("Ciudad del clima", Weather.place(this).name, this::chooseCity);
+        row("Fila «Recientes»", prefs.showRecents() ? "Visible: últimas apps que abriste" : "Oculta", () -> {
+            prefs.setShowRecents(!prefs.showRecents());
+            render(focusedRow());
+        });
+        row("Borrar la lista de recientes", "La fila vuelve a llenarse a medida que abrís apps", () -> {
+            prefs.clearRecents();
+            Ui.toast(this, "Recientes borradas");
+        });
+
         section("Apariencia");
         row("Tema de colores", t.name, this::chooseTheme);
         row("Fondo de pantalla", wallpaperLabel(), this::chooseWallpaper);
@@ -84,6 +100,8 @@ public class SettingsActivity extends BaseActivity {
         row("Repositorio de mis fondos", "github.com/" + prefs.fondosRepo(), this::editRepo);
         row("Suavizar el fondo", prefs.dim() + "%  (oscurece o aclara la imagen para leer mejor)",
                 this::chooseDim);
+        row("Tamaño de los íconos", ICON_SIZES[Math.max(0, Math.min(3, prefs.iconSize()))]
+                + "  (apps sin banner de TV)", this::chooseIconSize);
         row("Columnas de aplicaciones", prefs.columns() + " por fila", this::chooseColumns);
         row("Nombres de las apps", prefs.alwaysLabels() ? "Siempre visibles" : "Solo en la app seleccionada",
                 () -> {
@@ -124,7 +142,21 @@ public class SettingsActivity extends BaseActivity {
         row("Copia rápida interna", Backup.internalFile(this).exists()
                 ? "Hay una copia guardada en el equipo" : "Todavía no hay copia interna", this::internalMenu);
 
+        section("Actualizaciones");
+        row("Actualizar automáticamente", prefs.autoUpdate()
+                ? "Sí: busca versiones nuevas cada 6 horas y te avisa" : "No", () -> {
+            prefs.setAutoUpdate(!prefs.autoUpdate());
+            render(focusedRow());
+        });
+        row("Buscar actualización ahora", "Versión instalada: " + Updater.currentVersionName(this),
+                this::checkUpdateNow);
+
         section("Equipo");
+        row("Liberar RAM al volver al inicio", prefs.autoClean()
+                ? "Sí: cierra las apps en segundo plano cada vez que volvés" : "No", () -> {
+            prefs.setAutoClean(!prefs.autoClean());
+            render(focusedRow());
+        });
         row("Centro de mantenimiento", "Memoria RAM, almacenamiento, limpieza y estado del equipo",
                 () -> startActivity(new Intent(this, MaintenanceActivity.class)));
         row("Abrir Flow Launcher al encender", prefs.bootStart() ? "Sí" : "No", () -> {
@@ -140,6 +172,101 @@ public class SettingsActivity extends BaseActivity {
         row("Flow Launcher " + version(), "Launcher para Flow Box F1 · Hecho a medida", this::about);
 
         focusRow(focus);
+    }
+
+    static final String[] CLOCK_NAMES = {"Digital", "Digital con segundos", "12 horas (a. m. / p. m.)",
+            "Analógico", "Minimalista", "Retro LED"};
+    static final String[] ICON_SIZES = {"Pequeño", "Normal", "Grande", "Muy grande"};
+
+    private void chooseClock() {
+        new AlertDialog.Builder(this)
+                .setTitle("Estilo del reloj")
+                .setSingleChoiceItems(CLOCK_NAMES, prefs.clockStyle(), (d, w) -> {
+                    prefs.setClockStyle(w);
+                    d.dismiss();
+                    render(focusedRow());
+                    Ui.toast(this, "Reloj: " + CLOCK_NAMES[w]);
+                })
+                .show();
+    }
+
+    private void chooseIconSize() {
+        new AlertDialog.Builder(this)
+                .setTitle("Tamaño de los íconos")
+                .setSingleChoiceItems(ICON_SIZES, prefs.iconSize(), (d, w) -> {
+                    prefs.setIconSize(w);
+                    d.dismiss();
+                    render(focusedRow());
+                })
+                .show();
+    }
+
+    private void chooseCity() {
+        final android.widget.EditText et = new android.widget.EditText(this);
+        et.setSingleLine(true);
+        et.setHint("Ej.: Villa Elisa");
+        android.widget.FrameLayout wrap = new android.widget.FrameLayout(this);
+        int pad = Ui.dp(this, 24);
+        wrap.setPadding(pad, Ui.dp(this, 8), pad, 0);
+        wrap.addView(et);
+        new AlertDialog.Builder(this)
+                .setTitle("Escribí tu ciudad")
+                .setView(wrap)
+                .setPositiveButton("Buscar", (d, w) -> {
+                    final String q = et.getText().toString().trim();
+                    if (q.length() < 2) return;
+                    executor.execute(() -> {
+                        List<Weather.Place> found;
+                        try {
+                            found = Weather.search(q);
+                        } catch (Exception e) {
+                            found = null;
+                        }
+                        final List<Weather.Place> res = found;
+                        runOnUiThread(() -> {
+                            if (isFinishing()) return;
+                            if (res == null) {
+                                Ui.toast(this, "Sin conexión a internet");
+                                return;
+                            }
+                            if (res.isEmpty()) {
+                                Ui.toast(this, "No se encontró «" + q + "»");
+                                return;
+                            }
+                            String[] names = new String[res.size()];
+                            for (int i = 0; i < res.size(); i++) {
+                                names[i] = res.get(i).name + " — " + res.get(i).detail;
+                            }
+                            new AlertDialog.Builder(this)
+                                    .setTitle("Elegí la ciudad")
+                                    .setItems(names, (d2, i) -> {
+                                        Weather.setPlace(this, res.get(i));
+                                        HomeActivity.weatherDirty = true;
+                                        prefs.setShowWeather(true);
+                                        Ui.toast(this, "Clima de " + res.get(i).name);
+                                        render(focusedRow());
+                                    })
+                                    .show();
+                        });
+                    });
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private void checkUpdateNow() {
+        Ui.toast(this, "Buscando actualizaciones…");
+        final int current = Updater.currentVersionCode(this);
+        executor.execute(() -> {
+            final Updater.Release r = Updater.latest();
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                prefs.setLastUpdateCheck(System.currentTimeMillis());
+                if (r == null) Ui.toast(this, "No se pudo consultar GitHub. Revisá la conexión.");
+                else if (r.versionCode <= current) Ui.toast(this, "Ya tenés la última versión (" + r.versionName + ")");
+                else Updater.offer(this, r);
+            });
+        });
     }
 
     private String version() {
