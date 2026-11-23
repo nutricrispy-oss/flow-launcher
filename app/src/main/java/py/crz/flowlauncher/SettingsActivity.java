@@ -78,6 +78,10 @@ public class SettingsActivity extends BaseActivity {
         row("Fondo de pantalla", wallpaperLabel(), this::chooseWallpaper);
         row("Imágenes incluidas", Wallpaper.BUILTIN_NAMES.length + " fondos para elegir",
                 this::chooseBuiltin);
+        int mine = OnlineWallpapers.list(this).size();
+        row("Mis fondos de GitHub", (mine == 0 ? "Ninguno descargado todavía" : mine + " descargado(s)")
+                + "  ·  carpeta «fondos» del repositorio  ·  tocá para actualizar", this::chooseOnline);
+        row("Repositorio de mis fondos", "github.com/" + prefs.fondosRepo(), this::editRepo);
         row("Suavizar el fondo", prefs.dim() + "%  (oscurece o aclara la imagen para leer mejor)",
                 this::chooseDim);
         row("Columnas de aplicaciones", prefs.columns() + " por fila", this::chooseColumns);
@@ -173,17 +177,19 @@ public class SettingsActivity extends BaseActivity {
 
     private void chooseWallpaper() {
         String[] items = {"Imagen del tema (cambia con el tema)", "Elegir de las imágenes incluidas",
-                "Solo colores del tema (sin imagen)", "Imagen propia: galería / USB",
+                "Elegir de mis fondos de GitHub", "Solo colores del tema (sin imagen)", "Imagen propia: galería / USB",
                 "Imagen propia: explorador de archivos"};
         new AlertDialog.Builder(this)
                 .setTitle("Fondo de pantalla")
                 .setItems(items, (d, w) -> {
-                    if (w == 0 || w == 2) {
+                    if (w == 0 || w == 3) {
                         prefs.setWallpaperMode(w == 0 ? Prefs.WP_AUTO : Prefs.WP_GRADIENT);
                         render(focusedRow());
                     } else if (w == 1) {
                         chooseBuiltin();
-                    } else if (w == 3) {
+                    } else if (w == 2) {
+                        chooseOnline();
+                    } else if (w == 4) {
                         pickFromGallery();
                     } else {
                         pickWithFileManager();
@@ -192,8 +198,13 @@ public class SettingsActivity extends BaseActivity {
                 .show();
     }
 
-    /** Galería de imágenes incluidas con vista previa, navegable con el control. */
-    private void chooseBuiltin() {
+    interface PickListener {
+        void onPick(int index);
+    }
+
+    /** Galería con vista previa, navegable con el control. */
+    private void showImageGrid(String title, List<String> labels, List<android.graphics.Bitmap> thumbs,
+                               int current, PickListener listener) {
         final android.widget.GridLayout grid = new android.widget.GridLayout(this);
         grid.setColumnCount(4);
         int pad = Ui.dp(this, 16);
@@ -204,14 +215,13 @@ public class SettingsActivity extends BaseActivity {
         sv.setClipChildren(false);
         sv.addView(grid);
         final AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle("Imágenes incluidas")
+                .setTitle(title)
                 .setView(sv)
                 .setNegativeButton("Cerrar", null)
                 .create();
         int tw = Ui.dp(this, 150), th = tw * 9 / 16, m = Ui.dp(this, 8);
-        int current = Wallpaper.resolve(this, prefs);
         android.view.View first = null;
-        for (int i = 0; i < Wallpaper.BUILTIN_NAMES.length; i++) {
+        for (int i = 0; i < labels.size(); i++) {
             final int idx = i;
             final LinearLayout item = new LinearLayout(this);
             item.setOrientation(LinearLayout.VERTICAL);
@@ -223,27 +233,25 @@ public class SettingsActivity extends BaseActivity {
             frame.setClipToOutline(true);
             android.widget.ImageView iv = new android.widget.ImageView(this);
             iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-            iv.setImageBitmap(Wallpaper.loadBuiltin(this, i, 320));
+            iv.setImageBitmap(thumbs.get(i));
             frame.addView(iv, new android.widget.FrameLayout.LayoutParams(-1, -1));
-            if (i == current) frame.setForeground(Ui.rounded(0, r, Ui.dp(this, 2), 0xFFFFFFFF));
+            final boolean isCurrent = i == current;
+            if (isCurrent) frame.setForeground(Ui.rounded(0, r, Ui.dp(this, 2), 0xFFFFFFFF));
             item.addView(frame, new LinearLayout.LayoutParams(tw, th));
-            final android.widget.TextView label = Ui.text(this, Wallpaper.BUILTIN_NAMES[i]
-                    + (i < LauncherTheme.ALL.length ? "\n(tema " + LauncherTheme.ALL[i].name + ")" : "\n "),
-                    13, 0xFFFFFFFF, false);
+            final android.widget.TextView label = Ui.text(this, labels.get(i), 13, 0xFFFFFFFF, false);
             label.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            label.setMaxLines(2);
+            label.setEllipsize(android.text.TextUtils.TruncateAt.END);
             label.setPadding(0, Ui.dp(this, 4), 0, 0);
             item.addView(label, new LinearLayout.LayoutParams(tw, -2));
-            final boolean isCurrent = i == current;
             item.setOnFocusChangeListener((v, f) -> {
                 frame.setForeground(f ? Ui.rounded(0, r, Ui.dp(this, 4), t.accent)
                         : (isCurrent ? Ui.rounded(0, r, Ui.dp(this, 2), 0xFFFFFFFF) : null));
                 Ui.focusAnim(item, f, 1.06f);
             });
             item.setOnClickListener(v -> {
-                prefs.setWallpaperBuiltin(idx);
                 d.dismiss();
-                Ui.toast(this, "Fondo: " + Wallpaper.BUILTIN_NAMES[idx]);
-                render(focusedRow());
+                listener.onPick(idx);
             });
             android.widget.GridLayout.LayoutParams lp = new android.widget.GridLayout.LayoutParams();
             lp.setMargins(m, m, m, m);
@@ -253,6 +261,101 @@ public class SettingsActivity extends BaseActivity {
         d.show();
         final android.view.View focus = first;
         if (focus != null) focus.post(focus::requestFocus);
+    }
+
+    private void chooseBuiltin() {
+        List<String> labels = new ArrayList<>();
+        List<android.graphics.Bitmap> thumbs = new ArrayList<>();
+        for (int i = 0; i < Wallpaper.BUILTIN_NAMES.length; i++) {
+            labels.add(Wallpaper.BUILTIN_NAMES[i]
+                    + (i < LauncherTheme.ALL.length ? "\n(tema " + LauncherTheme.ALL[i].name + ")" : ""));
+            thumbs.add(Wallpaper.loadBuiltin(this, i, 320));
+        }
+        String m = prefs.wallpaperMode();
+        int current = (Prefs.WP_AUTO.equals(m) || Prefs.WP_BUILTIN.equals(m)) ? Wallpaper.resolve(this, prefs) : -1;
+        showImageGrid("Imágenes incluidas", labels, thumbs, current, idx -> {
+            prefs.setWallpaperBuiltin(idx);
+            Ui.toast(this, "Fondo: " + Wallpaper.BUILTIN_NAMES[idx]);
+            render(focusedRow());
+        });
+    }
+
+    // ---- Fondos desde la carpeta «fondos» del repositorio de GitHub
+
+    private void chooseOnline() {
+        Ui.toast(this, "Buscando fondos en GitHub…");
+        final String repo = prefs.fondosRepo();
+        executor.execute(() -> {
+            final OnlineWallpapers.Result r = OnlineWallpapers.sync(getApplicationContext(), repo);
+            final List<java.io.File> files = OnlineWallpapers.list(getApplicationContext());
+            final List<String> labels = new ArrayList<>();
+            final List<android.graphics.Bitmap> thumbs = new ArrayList<>();
+            for (java.io.File f : files) {
+                labels.add(OnlineWallpapers.displayName(f));
+                thumbs.add(Wallpaper.decodeFile(f, 320));
+            }
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                render(focusedRow());
+                if (r.error != null) {
+                    Ui.toast(this, r.error + (files.isEmpty() ? "" : ". Te muestro los ya descargados."));
+                } else if (r.downloaded > 0 || r.removed > 0) {
+                    Ui.toast(this, r.downloaded + " nuevo(s), " + r.removed + " quitado(s)");
+                }
+                if (files.isEmpty()) {
+                    new AlertDialog.Builder(this)
+                            .setTitle("Todavía no hay fondos")
+                            .setMessage("Subí imágenes (.jpg, .png o .webp) a la carpeta «"
+                                    + OnlineWallpapers.FOLDER + "» del repositorio:\n\n" + "github.com/" + repo
+                                    + "\n\nDespués volvé a tocar esta opción.")
+                            .setPositiveButton("Entendido", null)
+                            .show();
+                    return;
+                }
+                showImageGrid("Mis fondos (" + files.size() + ")", labels, thumbs, -1, idx -> {
+                    final java.io.File f = files.get(idx);
+                    executor.execute(() -> {
+                        final boolean ok = Wallpaper.compressTo(getApplicationContext(),
+                                android.net.Uri.fromFile(f), Wallpaper.file(getApplicationContext()));
+                        runOnUiThread(() -> {
+                            if (ok) {
+                                prefs.setWallpaperMode(Prefs.WP_CUSTOM);
+                                Ui.toast(this, "Fondo: " + labels.get(idx));
+                            } else {
+                                Ui.toast(this, "No se pudo usar esa imagen");
+                            }
+                            if (!isFinishing()) render(focusedRow());
+                        });
+                    });
+                });
+            });
+        });
+    }
+
+    private void editRepo() {
+        final android.widget.EditText et = new android.widget.EditText(this);
+        et.setSingleLine(true);
+        et.setText(prefs.fondosRepo());
+        et.setSelection(et.getText().length());
+        android.widget.FrameLayout wrap = new android.widget.FrameLayout(this);
+        int pad = Ui.dp(this, 24);
+        wrap.setPadding(pad, Ui.dp(this, 8), pad, 0);
+        wrap.addView(et);
+        new AlertDialog.Builder(this)
+                .setTitle("Repositorio de fondos (usuario/repositorio)")
+                .setView(wrap)
+                .setPositiveButton("Guardar", (d, w) -> {
+                    String v = et.getText().toString().trim().replace("https://github.com/", "");
+                    if (v.endsWith("/")) v = v.substring(0, v.length() - 1);
+                    prefs.setFondosRepo(v.isEmpty() ? OnlineWallpapers.DEFAULT_REPO : v);
+                    render(focusedRow());
+                })
+                .setNeutralButton("Por defecto", (d, w) -> {
+                    prefs.setFondosRepo(OnlineWallpapers.DEFAULT_REPO);
+                    render(focusedRow());
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
     }
 
     private void chooseDim() {

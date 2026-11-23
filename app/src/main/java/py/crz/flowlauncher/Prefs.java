@@ -62,6 +62,10 @@ final class Prefs {
     boolean homeHintShown() { return sp.getBoolean("home_hint", false); }
     void setHomeHintShown(boolean v) { sp.edit().putBoolean("home_hint", v).apply(); }
 
+    /** Repositorio de GitHub (usuario/repo) donde está la carpeta «fondos». */
+    String fondosRepo() { return sp.getString("fondos_repo", OnlineWallpapers.DEFAULT_REPO); }
+    void setFondosRepo(String v) { sp.edit().putString("fondos_repo", v).apply(); }
+
     boolean favInit() { return sp.getBoolean("fav_init", false); }
     void setFavInit(boolean v) { sp.edit().putBoolean("fav_init", v).apply(); }
 
@@ -116,6 +120,7 @@ final class Prefs {
         o.put("wp_builtin", wallpaperBuiltin());
         o.put("boot", bootStart());
         o.put("guard", guard());
+        o.put("fondos_repo", fondosRepo());
         o.put("favorites", new JSONArray(favorites()));
         o.put("hidden", new JSONArray(hidden()));
         o.put("locked", new JSONArray(locked()));
@@ -136,6 +141,7 @@ final class Prefs {
         e.putInt("wp_builtin", o.optInt("wp_builtin", 0));
         e.putBoolean("boot", o.optBoolean("boot", false));
         e.putBoolean("guard", o.optBoolean("guard", true));
+        e.putString("fondos_repo", o.optString("fondos_repo", OnlineWallpapers.DEFAULT_REPO));
         e.putString("favorites", arr(o, "favorites"));
         e.putString("hidden", arr(o, "hidden"));
         e.putString("locked", arr(o, "locked"));

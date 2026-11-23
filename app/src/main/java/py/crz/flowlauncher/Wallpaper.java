@@ -57,6 +57,11 @@ final class Wallpaper {
 
     /** Copia una imagen elegida por el usuario, reducida a tamaño de TV (máx. ~1920 px). */
     static boolean saveFromUri(Context c, Uri uri) {
+        return compressTo(c, uri, file(c));
+    }
+
+    /** Copia una imagen a dst reducida a tamaño TV y en JPEG. */
+    static boolean compressTo(Context c, Uri uri, File dst) {
         try {
             BitmapFactory.Options o = new BitmapFactory.Options();
             o.inJustDecodeBounds = true;
@@ -79,12 +84,12 @@ final class Wallpaper {
                 if (s != b) b.recycle();
                 b = s;
             }
-            File tmp = new File(c.getFilesDir(), "wallpaper.tmp");
+            File tmp = new File(dst.getParentFile(), dst.getName() + ".tmp");
             try (FileOutputStream fo = new FileOutputStream(tmp)) {
                 b.compress(Bitmap.CompressFormat.JPEG, 88, fo);
             }
             b.recycle();
-            return tmp.renameTo(file(c));
+            return tmp.renameTo(dst);
         } catch (Throwable e) {
             return false;
         }
@@ -113,8 +118,11 @@ final class Wallpaper {
     }
 
     static Bitmap load(Context c, int maxWidth) {
-        File f = file(c);
-        if (!f.exists()) return null;
+        return decodeFile(file(c), maxWidth);
+    }
+
+    static Bitmap decodeFile(File f, int maxWidth) {
+        if (f == null || !f.exists()) return null;
         try {
             BitmapFactory.Options o = new BitmapFactory.Options();
             o.inJustDecodeBounds = true;
