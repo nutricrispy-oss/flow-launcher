@@ -101,6 +101,9 @@ final class Prefs {
 
     void clearRecents() { putList("recents", new ArrayList<String>()); }
 
+    boolean wifiPermAsked() { return sp.getBoolean("wifi_perm", false); }
+    void setWifiPermAsked(boolean v) { sp.edit().putBoolean("wifi_perm", v).apply(); }
+
     boolean favInit() { return sp.getBoolean("fav_init", false); }
     void setFavInit(boolean v) { sp.edit().putBoolean("fav_init", v).apply(); }
 

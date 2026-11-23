@@ -147,9 +147,9 @@ public class HomeActivity extends Activity {
         header.addView(clockBox);
         LinearLayout dc = new LinearLayout(this);
         dc.setOrientation(LinearLayout.VERTICAL);
-        dc.setPadding(Ui.dp(this, 20), 0, 0, 0);
-        date = Ui.text(this, "", 18, Color.WHITE, false);
-        net = Ui.text(this, "", 14, Color.WHITE, false);
+        dc.setPadding(Ui.dp(this, 16), 0, 0, 0);
+        date = Ui.text(this, "", 15, Color.WHITE, false);
+        net = Ui.text(this, "", 12, Color.WHITE, false);
         dc.addView(date);
         dc.addView(net);
         header.addView(dc);
@@ -158,14 +158,14 @@ public class HomeActivity extends Activity {
         weatherBox = new LinearLayout(this);
         weatherBox.setOrientation(LinearLayout.HORIZONTAL);
         weatherBox.setGravity(Gravity.CENTER_VERTICAL);
-        weatherBox.setPadding(Ui.dp(this, 32), 0, 0, 0);
-        wIcon = Ui.text(this, "", 30, Color.WHITE, false);
+        weatherBox.setPadding(Ui.dp(this, 24), 0, 0, 0);
+        wIcon = Ui.text(this, "", 24, Color.WHITE, false);
         weatherBox.addView(wIcon);
         LinearLayout wc = new LinearLayout(this);
         wc.setOrientation(LinearLayout.VERTICAL);
-        wc.setPadding(Ui.dp(this, 10), 0, 0, 0);
-        wTemp = Ui.text(this, "", 22, Color.WHITE, true);
-        wDetail = Ui.text(this, "", 13, Color.WHITE, false);
+        wc.setPadding(Ui.dp(this, 8), 0, 0, 0);
+        wTemp = Ui.text(this, "", 16, Color.WHITE, true);
+        wDetail = Ui.text(this, "", 11, Color.WHITE, false);
         wc.addView(wTemp);
         wc.addView(wDetail);
         weatherBox.addView(wc);
@@ -464,6 +464,9 @@ public class HomeActivity extends Activity {
     private void addHeaderButton(String label, String tag, Runnable action) {
         TextView b = Ui.button(this, t, label, action);
         b.setTag(tag);
+        b.setTextSize(13);
+        b.setPadding(Ui.dp(this, 14), Ui.dp(this, 7), Ui.dp(this, 14), Ui.dp(this, 7));
+        ((LinearLayout.LayoutParams) b.getLayoutParams()).leftMargin = Ui.dp(this, 8);
         final View.OnFocusChangeListener base = b.getOnFocusChangeListener();
         b.setOnFocusChangeListener((v, f) -> {
             base.onFocusChange(v, f);
@@ -484,25 +487,25 @@ public class HomeActivity extends Activity {
             analog = null;
             if (st == 3) {
                 analog = new AnalogClockView(this);
-                int s = Ui.dp(this, 78);
+                int s = Ui.dp(this, 62);
                 clockBox.addView(analog, new LinearLayout.LayoutParams(s, s));
             } else {
-                clock = Ui.text(this, "", 46, Color.WHITE, true);
+                clock = Ui.text(this, "", 38, Color.WHITE, true);
                 clockBox.addView(clock);
-                if (st == 1) clock.setTextSize(40);
+                if (st == 1) clock.setTextSize(32);
                 if (st == 4) {
-                    clock.setTextSize(58);
+                    clock.setTextSize(46);
                     clock.setTypeface(Typeface.create("sans-serif-thin", Typeface.NORMAL));
                 }
                 if (st == 5) {
                     clock.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
-                    clock.setTextSize(44);
+                    clock.setTextSize(34);
                     clock.setLetterSpacing(0.12f);
-                    clock.setPadding(Ui.dp(this, 14), Ui.dp(this, 2), Ui.dp(this, 14), Ui.dp(this, 2));
+                    clock.setPadding(Ui.dp(this, 12), Ui.dp(this, 2), Ui.dp(this, 12), Ui.dp(this, 2));
                 }
                 if (st == 2) {
-                    ampm = Ui.text(this, "", 18, Color.WHITE, true);
-                    ampm.setPadding(Ui.dp(this, 6), Ui.dp(this, 10), 0, 0);
+                    ampm = Ui.text(this, "", 14, Color.WHITE, true);
+                    ampm.setPadding(Ui.dp(this, 5), Ui.dp(this, 8), 0, 0);
                     clockBox.addView(ampm);
                 }
             }
@@ -547,14 +550,60 @@ public class HomeActivity extends Activity {
             NetworkInfo ni = cm == null ? null : cm.getActiveNetworkInfo();
             if (ni == null || !ni.isConnected()) s = "Sin conexión a internet";
             else if (ni.getType() == ConnectivityManager.TYPE_ETHERNET) s = "Conectado por cable";
-            else if (ni.getType() == ConnectivityManager.TYPE_WIFI) s = "Conectado por Wi-Fi";
-            else s = "Conectado";
-            String ip = localIp();
-            if (ip != null && ni != null && ni.isConnected()) s += "  ·  IP " + ip;
+            else if (ni.getType() == ConnectivityManager.TYPE_WIFI) {
+                String ssid = wifiName();
+                s = ssid != null ? "Conectado a " + ssid : "Conectado por Wi-Fi";
+                if (ssid == null) askWifiNamePermission();
+            } else s = "Conectado";
         } catch (Exception e) {
             s = "";
         }
         net.setText(s);
+    }
+
+    /** Nombre de la red Wi-Fi (Android 8.1+ pide permiso de ubicación para leerlo). */
+    @SuppressWarnings("deprecation")
+    private String wifiName() {
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)
+                    getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm == null) return null;
+            android.net.wifi.WifiInfo wi = wm.getConnectionInfo();
+            if (wi == null) return null;
+            String ssid = wi.getSSID();
+            if (ssid == null) return null;
+            if (ssid.startsWith("\"") && ssid.endsWith("\"") && ssid.length() > 1) {
+                ssid = ssid.substring(1, ssid.length() - 1);
+            }
+            if (ssid.isEmpty() || ssid.contains("unknown ssid") || ssid.equals("0x")) return null;
+            return ssid;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static final int REQ_WIFI_NAME = 31;
+
+    private void askWifiNamePermission() {
+        if (Build.VERSION.SDK_INT < 23) return;
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        if (prefs.wifiPermAsked()) return;
+        prefs.setWifiPermAsked(true);
+        handler.postDelayed(() -> {
+            if (isFinishing()) return;
+            try {
+                requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION,
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_WIFI_NAME);
+            } catch (Exception ignored) {
+            }
+        }, 1500);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode == REQ_WIFI_NAME) updateNet();
     }
 
     static String localIp() {
