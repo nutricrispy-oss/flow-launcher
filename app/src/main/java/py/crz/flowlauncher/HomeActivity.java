@@ -227,6 +227,27 @@ public class HomeActivity extends Activity {
         handler.post(clockTick);
         if (needsReload || apps.isEmpty()) reload();
         else render();
+        maybeShowHomeHint();
+    }
+
+    /** Si el equipo no deja usar Flow Launcher como predeterminado, ofrece activar el guardián. */
+    private void maybeShowHomeHint() {
+        if (prefs.homeHintShown() || HomeGuardService.isDefaultHome(this)
+                || HomeGuardService.isEnabled(this)) return;
+        prefs.setHomeHintShown(true);
+        handler.postDelayed(() -> {
+            if (isFinishing()) return;
+            new AlertDialog.Builder(this)
+                    .setTitle("Que Flow Launcher sea siempre el inicio")
+                    .setMessage("Este equipo no deja elegir otro launcher predeterminado.\n\n"
+                            + "Solución: activá «Flow Launcher - Volver al inicio» en Accesibilidad. "
+                            + "Así, cada vez que presiones Inicio o Salir, el equipo vuelve a Flow Launcher.\n\n"
+                            + "Ruta habitual: Ajustes › Preferencias del dispositivo › Accesibilidad.")
+                    .setPositiveButton("Abrir Accesibilidad",
+                            (d, w) -> HomeGuardService.openAccessibilitySettings(this))
+                    .setNegativeButton("Ahora no", null)
+                    .show();
+        }, 1200);
     }
 
     @Override
@@ -239,6 +260,22 @@ public class HomeActivity extends Activity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) Ui.immersive(this);
+    }
+
+    /** Botones que en otros equipos "salen" del launcher: aquí solo vuelven arriba. */
+    private static boolean isExitKey(int code) {
+        return code == KeyEvent.KEYCODE_BACK || code == KeyEvent.KEYCODE_ESCAPE
+                || code == KeyEvent.KEYCODE_BUTTON_B || code == KeyEvent.KEYCODE_DEL
+                || code == KeyEvent.KEYCODE_EXPLORER;
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (isExitKey(event.getKeyCode())) {
+            if (event.getAction() == KeyEvent.ACTION_UP) goTop();
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     /** Botón Atrás o Inicio estando en el launcher: volver arriba. */

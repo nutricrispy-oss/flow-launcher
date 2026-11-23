@@ -56,6 +56,22 @@ public class SettingsActivity extends BaseActivity {
         clear();
         header("Ajustes", "Flow Launcher " + version() + "  ·  Presioná Atrás para volver al inicio");
 
+        section("Pantalla de inicio");
+        boolean isDefault = HomeGuardService.isDefaultHome(this);
+        boolean guardOn = HomeGuardService.isEnabled(this);
+        row("Volver siempre a Flow Launcher", guardOn
+                        ? "Activado en Accesibilidad ✓ (Inicio y Salir vuelven aquí)"
+                        : (isDefault ? "No hace falta: Flow Launcher ya es el predeterminado"
+                        : "Desactivado: tocá para activarlo en Accesibilidad"),
+                this::guardMenu);
+        if (guardOn) {
+            row("Guardián del inicio", prefs.guard() ? "Funcionando" : "En pausa (el inicio de fábrica se queda)",
+                    () -> {
+                        prefs.setGuard(!prefs.guard());
+                        render(focusedRow());
+                    });
+        }
+
         section("Apariencia");
         row("Tema de colores", t.name, this::chooseTheme);
         row("Fondo de pantalla", prefs.wallpaperImage() ? "Imagen personalizada" : "Colores del tema",
@@ -491,6 +507,21 @@ public class SettingsActivity extends BaseActivity {
                         + "Si no aparece la pregunta, el equipo tiene el launcher de fábrica bloqueado; "
                         + "en ese caso activá «Abrir Flow Launcher al encender».")
                 .setPositiveButton("Entendido", null)
+                .show();
+    }
+
+    private void guardMenu() {
+        new AlertDialog.Builder(this)
+                .setTitle("Volver siempre a Flow Launcher")
+                .setMessage("Si el equipo no deja cambiar el launcher, activá el servicio "
+                        + "«Flow Launcher - Volver al inicio»:\n\n"
+                        + "1. Abrí Accesibilidad (botón de abajo).\n"
+                        + "2. Elegí «Flow Launcher - Volver al inicio».\n"
+                        + "3. Activalo y aceptá.\n\n"
+                        + "Si en tu equipo no aparece Accesibilidad, se puede activar desde una computadora "
+                        + "con ADB (consultame cómo).")
+                .setPositiveButton("Abrir Accesibilidad", (d, w) -> HomeGuardService.openAccessibilitySettings(this))
+                .setNegativeButton("Cerrar", null)
                 .show();
     }
 

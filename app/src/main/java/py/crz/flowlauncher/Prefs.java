@@ -45,6 +45,13 @@ final class Prefs {
     boolean bootStart() { return sp.getBoolean("boot", false); }
     void setBootStart(boolean v) { sp.edit().putBoolean("boot", v).apply(); }
 
+    /** Volver siempre a Flow Launcher cuando aparece el inicio de fábrica. */
+    boolean guard() { return sp.getBoolean("guard", true); }
+    void setGuard(boolean v) { sp.edit().putBoolean("guard", v).apply(); }
+
+    boolean homeHintShown() { return sp.getBoolean("home_hint", false); }
+    void setHomeHintShown(boolean v) { sp.edit().putBoolean("home_hint", v).apply(); }
+
     boolean favInit() { return sp.getBoolean("fav_init", false); }
     void setFavInit(boolean v) { sp.edit().putBoolean("fav_init", v).apply(); }
 
@@ -97,6 +104,7 @@ final class Prefs {
         o.put("dim", dim());
         o.put("wall_img", wallpaperImage());
         o.put("boot", bootStart());
+        o.put("guard", guard());
         o.put("favorites", new JSONArray(favorites()));
         o.put("hidden", new JSONArray(hidden()));
         o.put("locked", new JSONArray(locked()));
@@ -114,6 +122,7 @@ final class Prefs {
         e.putInt("dim", o.optInt("dim", 30));
         e.putBoolean("wall_img", o.optBoolean("wall_img", false));
         e.putBoolean("boot", o.optBoolean("boot", false));
+        e.putBoolean("guard", o.optBoolean("guard", true));
         e.putString("favorites", arr(o, "favorites"));
         e.putString("hidden", arr(o, "hidden"));
         e.putString("locked", arr(o, "locked"));

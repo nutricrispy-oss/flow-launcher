@@ -17,6 +17,7 @@ import android.os.StatFs;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
+import android.view.KeyEvent;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -101,6 +102,9 @@ public class MaintenanceActivity extends BaseActivity {
             Ui.toast(this, "La lista se recargará al volver al inicio");
         });
         row("Reiniciar Flow Launcher", "Cierra y vuelve a abrir el launcher", this::restartLauncher);
+
+        row("Probar botones del control", "Muestra el código de cada botón que presiones",
+                this::keyTester);
 
         section("Aplicaciones y sistema");
         row("Administrador de aplicaciones", "Abrir, ver información o desinstalar apps",
@@ -228,6 +232,31 @@ public class MaintenanceActivity extends BaseActivity {
                         .show();
             });
         });
+    }
+
+    /** Muestra qué envía cada botón del control (para diagnosticar el botón Salir, etc.). */
+    private void keyTester() {
+        final TextView log = Ui.text(this, "Presioná cualquier botón del control…\n"
+                + "(se cierra solo 8 segundos después del último botón)", 18, 0xFFFFFFFF, false);
+        int p = Ui.dp(this, 24);
+        log.setPadding(p, p, p, p);
+        log.setMinWidth(Ui.dp(this, 460));
+        final AlertDialog d = new AlertDialog.Builder(this).setTitle("Probar botones").setView(log).create();
+        final StringBuilder sb = new StringBuilder();
+        final Runnable close = d::dismiss;
+        d.setOnKeyListener((di, code, ev) -> {
+            if (ev.getAction() == KeyEvent.ACTION_DOWN && ev.getRepeatCount() == 0) {
+                String line = KeyEvent.keyCodeToString(code).replace("KEYCODE_", "") + "  (" + code + ")";
+                sb.insert(0, line + "\n");
+                if (sb.length() > 400) sb.setLength(400);
+                log.setText(sb.toString());
+                handler.removeCallbacks(close);
+                handler.postDelayed(close, 8000);
+            }
+            return true;
+        });
+        d.show();
+        handler.postDelayed(close, 15000);
     }
 
     private void clearOwnCache() {

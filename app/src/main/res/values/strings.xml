@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="guard_description">Vuelve a abrir Flow Launcher cada vez que el equipo muestra su pantalla de inicio de fábrica (por ejemplo, al presionar Inicio o Salir). No lee el contenido de la pantalla ni lo que escribís.</string>
+</resources>
