@@ -1,0 +1,633 @@
+package py.crz.flowlauncher;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import android.text.TextUtils;
+import android.util.DisplayMetrics;
+import android.view.Gravity;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.GridLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+
+import org.json.JSONObject;
+
+import java.io.File;
+import java.net.Inet4Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/** Pantalla de inicio del launcher. */
+public class HomeActivity extends Activity {
+
+    /** Se pone en true cuando hay que volver a leer las apps instaladas. */
+    static volatile boolean needsReload = true;
+
+    private Prefs prefs;
+    private LauncherTheme t;
+    private FrameLayout root;
+    private ImageView wallImg;
+    private View dimView;
+    private ScrollView scroll;
+    private LinearLayout content, buttonBox, favRow;
+    private GridLayout grid;
+    private TextView clock, date, net, favTitle, allTitle;
+
+    private final List<AppItem> apps = new ArrayList<>();
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private String lastFocusTag;
+    private long wallStamp = -1;
+    private boolean loading;
+
+    private final BroadcastReceiver packageReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            needsReload = true;
+            reload();
+        }
+    };
+
+    private final BroadcastReceiver systemReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            updateClock();
+            updateNet();
+        }
+    };
+
+    private final Runnable clockTick = new Runnable() {
+        @Override
+        public void run() {
+            updateClock();
+            handler.postDelayed(this, 15000);
+        }
+    };
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        prefs = new Prefs(this);
+        t = LauncherTheme.get(prefs.theme());
+        buildUi();
+        registerReceivers();
+    }
+
+    // ------------------------------------------------------------------ UI base
+
+    private void buildUi() {
+        root = new FrameLayout(this);
+        wallImg = new ImageView(this);
+        wallImg.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        root.addView(wallImg, new FrameLayout.LayoutParams(-1, -1));
+        dimView = new View(this);
+        root.addView(dimView, new FrameLayout.LayoutParams(-1, -1));
+
+        scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setClipChildren(false);
+        scroll.setVerticalScrollBarEnabled(false);
+        content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setClipChildren(false);
+        content.setClipToPadding(false);
+        content.setPadding(Ui.dp(this, 48), Ui.dp(this, 24), Ui.dp(this, 48), Ui.dp(this, 48));
+        scroll.addView(content, new ScrollView.LayoutParams(-1, -2));
+        root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+
+        // Encabezado: hora, fecha, red y botones
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setClipChildren(false);
+        clock = Ui.text(this, "", 46, Color.WHITE, true);
+        header.addView(clock);
+        LinearLayout dc = new LinearLayout(this);
+        dc.setOrientation(LinearLayout.VERTICAL);
+        dc.setPadding(Ui.dp(this, 20), 0, 0, 0);
+        date = Ui.text(this, "", 18, Color.WHITE, false);
+        net = Ui.text(this, "", 14, Color.WHITE, false);
+        dc.addView(date);
+        dc.addView(net);
+        header.addView(dc);
+        header.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        buttonBox = new LinearLayout(this);
+        buttonBox.setOrientation(LinearLayout.HORIZONTAL);
+        buttonBox.setClipChildren(false);
+        header.addView(buttonBox);
+        content.addView(header);
+
+        favTitle = Ui.text(this, "FAVORITOS", 14, Color.WHITE, true);
+        favTitle.setLetterSpacing(0.08f);
+        favTitle.setPadding(Ui.dp(this, 10), Ui.dp(this, 20), 0, 0);
+        content.addView(favTitle);
+
+        HorizontalScrollView favScroll = new HorizontalScrollView(this);
+        favScroll.setHorizontalScrollBarEnabled(false);
+        favScroll.setClipChildren(false);
+        favScroll.setClipToPadding(false);
+        favRow = new LinearLayout(this);
+        favRow.setOrientation(LinearLayout.HORIZONTAL);
+        favRow.setClipChildren(false);
+        favRow.setClipToPadding(false);
+        favRow.setPadding(0, Ui.dp(this, 12), Ui.dp(this, 24), Ui.dp(this, 12));
+        favScroll.addView(favRow);
+        content.addView(favScroll);
+
+        allTitle = Ui.text(this, "TODAS LAS APLICACIONES", 14, Color.WHITE, true);
+        allTitle.setLetterSpacing(0.08f);
+        allTitle.setPadding(Ui.dp(this, 10), Ui.dp(this, 10), 0, 0);
+        content.addView(allTitle);
+
+        grid = new GridLayout(this);
+        grid.setClipChildren(false);
+        grid.setClipToPadding(false);
+        grid.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 8));
+        content.addView(grid);
+
+        setContentView(root);
+    }
+
+    private void registerReceivers() {
+        IntentFilter pf = new IntentFilter();
+        pf.addAction(Intent.ACTION_PACKAGE_ADDED);
+        pf.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        pf.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        pf.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        pf.addDataScheme("package");
+        register(packageReceiver, pf);
+
+        IntentFilter sf = new IntentFilter();
+        sf.addAction(Intent.ACTION_TIME_TICK);
+        sf.addAction(Intent.ACTION_TIME_CHANGED);
+        sf.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+        sf.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+        register(systemReceiver, sf);
+    }
+
+    private void register(BroadcastReceiver r, IntentFilter f) {
+        try {
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, f, 2 /* RECEIVER_EXPORTED */);
+            else registerReceiver(r, f);
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        try {
+            unregisterReceiver(packageReceiver);
+            unregisterReceiver(systemReceiver);
+        } catch (Exception ignored) {
+        }
+        executor.shutdownNow();
+        super.onDestroy();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Ui.immersive(this);
+        applyTheme();
+        updateClock();
+        updateNet();
+        handler.removeCallbacks(clockTick);
+        handler.post(clockTick);
+        if (needsReload || apps.isEmpty()) reload();
+        else render();
+    }
+
+    @Override
+    protected void onPause() {
+        handler.removeCallbacks(clockTick);
+        super.onPause();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) Ui.immersive(this);
+    }
+
+    /** Botón Atrás o Inicio estando en el launcher: volver arriba. */
+    @Override
+    public void onBackPressed() {
+        goTop();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        goTop();
+    }
+
+    private void goTop() {
+        if (scroll == null) return;
+        scroll.smoothScrollTo(0, 0);
+        lastFocusTag = null;
+        restoreFocus();
+    }
+
+    // ------------------------------------------------------------------ Tema y fondo
+
+    private void applyTheme() {
+        t = LauncherTheme.get(prefs.theme());
+        root.setBackground(Ui.background(t));
+        File f = Wallpaper.file(this);
+        if (prefs.wallpaperImage() && f.exists()) {
+            if (f.lastModified() != wallStamp) {
+                Bitmap bm = Wallpaper.load(this, 1920);
+                wallImg.setImageBitmap(bm);
+                wallStamp = f.lastModified();
+            }
+            wallImg.setVisibility(View.VISIBLE);
+            dimView.setBackgroundColor(Color.argb(prefs.dim() * 255 / 100, 0, 0, 0));
+        } else {
+            wallImg.setVisibility(View.GONE);
+            wallImg.setImageDrawable(null);
+            wallStamp = -1;
+            dimView.setBackgroundColor(Color.TRANSPARENT);
+        }
+        clock.setTextColor(t.text);
+        date.setTextColor(t.subtext);
+        net.setTextColor(t.subtext);
+        favTitle.setTextColor(t.accent);
+        allTitle.setTextColor(t.accent);
+        buildButtons();
+    }
+
+    private void buildButtons() {
+        buttonBox.removeAllViews();
+        addHeaderButton("Ajustes", "btn:settings", () -> PinDialogs.require(this, prefs, null,
+                () -> startActivity(new Intent(this, SettingsActivity.class))));
+        addHeaderButton("Mantenimiento", "btn:maint", () -> PinDialogs.require(this, prefs, null,
+                () -> startActivity(new Intent(this, MaintenanceActivity.class))));
+        addHeaderButton("Android", "btn:android", () -> AppRepository.openSystemScreen(this,
+                Settings.ACTION_SETTINGS));
+    }
+
+    private void addHeaderButton(String label, String tag, Runnable action) {
+        TextView b = Ui.button(this, t, label, action);
+        b.setTag(tag);
+        final View.OnFocusChangeListener base = b.getOnFocusChangeListener();
+        b.setOnFocusChangeListener((v, f) -> {
+            base.onFocusChange(v, f);
+            if (f) lastFocusTag = (String) v.getTag();
+        });
+        buttonBox.addView(b);
+    }
+
+    // ------------------------------------------------------------------ Reloj y red
+
+    private void updateClock() {
+        if (clock == null) return;
+        Date now = new Date();
+        clock.setText(new SimpleDateFormat("HH:mm", Locale.getDefault()).format(now));
+        String d = new SimpleDateFormat("EEEE d 'de' MMMM", new Locale("es", "PY")).format(now);
+        if (d.length() > 0) d = Character.toUpperCase(d.charAt(0)) + d.substring(1);
+        date.setText(d);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void updateNet() {
+        if (net == null) return;
+        String s;
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            NetworkInfo ni = cm == null ? null : cm.getActiveNetworkInfo();
+            if (ni == null || !ni.isConnected()) s = "Sin conexión a internet";
+            else if (ni.getType() == ConnectivityManager.TYPE_ETHERNET) s = "Conectado por cable";
+            else if (ni.getType() == ConnectivityManager.TYPE_WIFI) s = "Conectado por Wi-Fi";
+            else s = "Conectado";
+            String ip = localIp();
+            if (ip != null && ni != null && ni.isConnected()) s += "  ·  IP " + ip;
+        } catch (Exception e) {
+            s = "";
+        }
+        net.setText(s);
+    }
+
+    static String localIp() {
+        try {
+            Enumeration<NetworkInterface> ifs = NetworkInterface.getNetworkInterfaces();
+            while (ifs != null && ifs.hasMoreElements()) {
+                NetworkInterface ni = ifs.nextElement();
+                if (!ni.isUp() || ni.isLoopback()) continue;
+                Enumeration<InetAddress> as = ni.getInetAddresses();
+                while (as.hasMoreElements()) {
+                    InetAddress a = as.nextElement();
+                    if (a instanceof Inet4Address && !a.isLoopbackAddress()) return a.getHostAddress();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    // ------------------------------------------------------------------ Apps
+
+    private void reload() {
+        loading = true;
+        if (apps.isEmpty()) render();
+        final Context app = getApplicationContext();
+        try {
+            executor.execute(() -> {
+                final List<AppItem> list = AppRepository.load(app, true);
+                runOnUiThread(() -> {
+                    if (isFinishing()) return;
+                    loading = false;
+                    needsReload = false;
+                    apps.clear();
+                    apps.addAll(list);
+                    firstRunFavorites();
+                    render();
+                });
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** La primera vez, agrega como favoritas hasta 6 apps de TV. */
+    private void firstRunFavorites() {
+        if (prefs.favInit()) return;
+        List<String> f = new ArrayList<>();
+        for (AppItem a : apps) if (a.leanback && f.size() < 6) f.add(a.pkg);
+        prefs.setFavorites(f);
+        prefs.setFavInit(true);
+    }
+
+    private void render() {
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        int cols = prefs.columns();
+        int padH = Ui.dp(this, 48);
+        int gap = Ui.dp(this, 20);
+        int tileW = (dm.widthPixels - 2 * padH) / cols - gap;
+        int tileH = tileW * 9 / 16;
+
+        Set<String> hidden = prefs.hidden();
+        Set<String> locked = prefs.locked();
+        Map<String, AppItem> byPkg = new HashMap<>();
+        for (AppItem a : apps) byPkg.put(a.pkg, a);
+
+        // Favoritos
+        favRow.removeAllViews();
+        int favCount = 0;
+        for (String k : prefs.favorites()) {
+            AppItem a = byPkg.get(k);
+            if (a == null || hidden.contains(k)) continue;
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, -2);
+            lp.setMargins(gap / 2, 0, gap / 2, 0);
+            favRow.addView(makeTile(a, tileW, tileH, true, locked.contains(k)), lp);
+            favCount++;
+        }
+        if (favCount == 0) {
+            TextView hint = Ui.text(this, loading ? "Cargando…"
+                    : "Mantené presionado OK (o el botón Menú) sobre una app para agregarla a favoritos.",
+                    15, t.subtext, false);
+            hint.setPadding(gap / 2, Ui.dp(this, 8), 0, Ui.dp(this, 8));
+            favRow.addView(hint);
+        }
+
+        // Todas las apps
+        List<AppItem> visible = new ArrayList<>();
+        for (AppItem a : apps) if (!hidden.contains(a.pkg)) visible.add(a);
+        if ("usage".equals(prefs.sort())) {
+            final JSONObject usage = prefs.usageJson();
+            Collections.sort(visible, (x, y) -> {
+                int d = usage.optInt(y.pkg, 0) - usage.optInt(x.pkg, 0);
+                return d != 0 ? d : x.label.compareToIgnoreCase(y.label);
+            });
+        }
+        grid.removeAllViews();
+        grid.setColumnCount(cols);
+        for (AppItem a : visible) {
+            GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
+            lp.width = tileW;
+            lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            lp.setMargins(gap / 2, gap / 2, gap / 2, gap / 2);
+            grid.addView(makeTile(a, tileW, tileH, false, locked.contains(a.pkg)), lp);
+        }
+        allTitle.setText(loading && apps.isEmpty() ? "CARGANDO APLICACIONES…"
+                : "TODAS LAS APLICACIONES (" + visible.size() + ")");
+        restoreFocus();
+    }
+
+    private void restoreFocus() {
+        View target = null;
+        if (lastFocusTag != null) {
+            target = content.findViewWithTag(lastFocusTag);
+            if (target == null && lastFocusTag.startsWith("fav:")) {
+                target = content.findViewWithTag("app:" + lastFocusTag.substring(4));
+            }
+        }
+        if (target == null && favRow.getChildCount() > 0 && favRow.getChildAt(0).isFocusable()) {
+            target = favRow.getChildAt(0);
+        }
+        if (target == null && grid.getChildCount() > 0) target = grid.getChildAt(0);
+        if (target == null && buttonBox.getChildCount() > 0) target = buttonBox.getChildAt(0);
+        if (target != null) {
+            final View v = target;
+            v.post(v::requestFocus);
+        }
+    }
+
+    private View makeTile(final AppItem a, int w, int h, final boolean fav, boolean isLocked) {
+        final boolean always = prefs.alwaysLabels();
+        final LinearLayout tile = new LinearLayout(this);
+        tile.setOrientation(LinearLayout.VERTICAL);
+        tile.setFocusable(true);
+        tile.setClickable(true);
+        tile.setClipChildren(false);
+        tile.setTag((fav ? "fav:" : "app:") + a.pkg);
+
+        final float r = Ui.dp(this, 10);
+        final FrameLayout card = new FrameLayout(this);
+        card.setBackground(Ui.rounded(t.card, r, 0, 0));
+        card.setClipToOutline(true);
+        if (a.banner != null) {
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            iv.setImageDrawable(a.banner);
+            card.addView(iv, new FrameLayout.LayoutParams(-1, -1));
+        } else {
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            if (a.icon != null) iv.setImageDrawable(a.icon);
+            else iv.setImageResource(android.R.drawable.sym_def_app_icon);
+            int s = Math.round(h * 0.58f);
+            card.addView(iv, new FrameLayout.LayoutParams(s, s, Gravity.CENTER));
+        }
+        if (isLocked) {
+            TextView lock = Ui.text(this, "🔒", 14, Color.WHITE, false);
+            lock.setPadding(Ui.dp(this, 6), Ui.dp(this, 2), Ui.dp(this, 6), Ui.dp(this, 2));
+            lock.setBackground(Ui.rounded(0x99000000, Ui.dp(this, 8), 0, 0));
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+            lp.setMargins(0, Ui.dp(this, 6), Ui.dp(this, 6), 0);
+            card.addView(lock, lp);
+        }
+        tile.addView(card, new LinearLayout.LayoutParams(w, h));
+
+        final TextView label = Ui.text(this, a.label, 14, t.subtext, false);
+        label.setSingleLine(true);
+        label.setEllipsize(TextUtils.TruncateAt.END);
+        label.setGravity(Gravity.CENTER_HORIZONTAL);
+        label.setPadding(0, Ui.dp(this, 6), 0, 0);
+        label.setVisibility(always ? View.VISIBLE : View.INVISIBLE);
+        tile.addView(label, new LinearLayout.LayoutParams(w, -2));
+
+        tile.setOnFocusChangeListener((v, f) -> {
+            Ui.focusAnim(tile, f, 1.08f);
+            card.setForeground(f ? Ui.rounded(Color.TRANSPARENT, r, Ui.dp(this, 3), t.accent) : null);
+            label.setTextColor(f ? t.text : t.subtext);
+            label.setTypeface(f ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            if (!always) label.setVisibility(f ? View.VISIBLE : View.INVISIBLE);
+            if (f) lastFocusTag = (String) tile.getTag();
+        });
+        tile.setOnClickListener(v -> open(a));
+        tile.setOnLongClickListener(v -> {
+            showOptions(a);
+            return true;
+        });
+        tile.setOnKeyListener((v, code, ev) -> {
+            if (code == KeyEvent.KEYCODE_MENU && ev.getAction() == KeyEvent.ACTION_UP) {
+                showOptions(a);
+                return true;
+            }
+            return false;
+        });
+        return tile;
+    }
+
+    private void open(AppItem a) {
+        Runnable go = () -> {
+            prefs.addUsage(a.pkg);
+            if (!AppRepository.launch(this, a)) Ui.toast(this, "No se pudo abrir " + a.label);
+        };
+        if (prefs.locked().contains(a.pkg)) {
+            PinDialogs.require(this, prefs, "PIN para abrir " + a.label, go);
+        } else {
+            go.run();
+        }
+    }
+
+    // ------------------------------------------------------------------ Menú de cada app
+
+    private void showOptions(final AppItem a) {
+        final List<String> labels = new ArrayList<>();
+        final List<Runnable> actions = new ArrayList<>();
+        final List<String> favs = prefs.favorites();
+        final boolean isFav = favs.contains(a.pkg);
+        final boolean isLocked = prefs.locked().contains(a.pkg);
+
+        labels.add("Abrir");
+        actions.add(() -> open(a));
+        if (!isFav) {
+            labels.add("Agregar a favoritos");
+            actions.add(() -> {
+                favs.add(a.pkg);
+                prefs.setFavorites(favs);
+                lastFocusTag = "fav:" + a.pkg;
+                render();
+            });
+        } else {
+            labels.add("Mover a la izquierda");
+            actions.add(() -> moveFavorite(a.pkg, -1));
+            labels.add("Mover a la derecha");
+            actions.add(() -> moveFavorite(a.pkg, 1));
+            labels.add("Quitar de favoritos");
+            actions.add(() -> {
+                favs.remove(a.pkg);
+                prefs.setFavorites(favs);
+                lastFocusTag = "app:" + a.pkg;
+                render();
+            });
+        }
+        labels.add("Ocultar aplicación");
+        actions.add(() -> PinDialogs.require(this, prefs, null, () -> {
+            Set<String> h = prefs.hidden();
+            h.add(a.pkg);
+            prefs.setHidden(h);
+            lastFocusTag = null;
+            render();
+            Ui.toast(this, "Oculta. Podés volver a mostrarla en Ajustes › Apps ocultas");
+        }));
+        if (isLocked) {
+            labels.add("Quitar bloqueo con PIN");
+            actions.add(() -> PinDialogs.require(this, prefs, null, () -> setLocked(a.pkg, false)));
+        } else {
+            labels.add("Bloquear con PIN");
+            actions.add(() -> {
+                if (!prefs.hasPin()) {
+                    Ui.toast(this, "Primero creá un PIN");
+                    PinDialogs.create(this, prefs, () -> setLocked(a.pkg, true));
+                } else {
+                    PinDialogs.require(this, prefs, null, () -> setLocked(a.pkg, true));
+                }
+            });
+        }
+        labels.add("Información de la app");
+        actions.add(() -> AppRepository.openAppInfo(this, a.pkg));
+        if (!a.system) {
+            labels.add("Desinstalar");
+            actions.add(() -> PinDialogs.require(this, prefs, null,
+                    () -> AppRepository.uninstall(this, a.pkg)));
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle(a.label)
+                .setItems(labels.toArray(new String[0]), (d, which) -> actions.get(which).run())
+                .show();
+    }
+
+    private void setLocked(String pkg, boolean lock) {
+        Set<String> l = prefs.locked();
+        if (lock) l.add(pkg);
+        else l.remove(pkg);
+        prefs.setLocked(l);
+        render();
+        Ui.toast(this, lock ? "App bloqueada: pedirá el PIN al abrirla" : "Bloqueo quitado");
+    }
+
+    private void moveFavorite(String pkg, int dir) {
+        List<String> f = prefs.favorites();
+        int i = f.indexOf(pkg);
+        int j = i + dir;
+        if (i < 0 || j < 0 || j >= f.size()) return;
+        Collections.swap(f, i, j);
+        prefs.setFavorites(f);
+        lastFocusTag = "fav:" + pkg;
+        render();
+    }
+}

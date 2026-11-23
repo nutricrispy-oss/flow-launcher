@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'py.crz.flowlauncher'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "py.crz.flowlauncher"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    // Misma firma para todas las compilaciones (Android Studio o GitHub):
+    // así cada versión nueva se instala ENCIMA de la anterior sin perder la configuración.
+    signingConfigs {
+        flow {
+            storeFile file('flowlauncher.keystore')
+            storePassword 'flowlauncher'
+            keyAlias 'flowlauncher'
+            keyPassword 'flowlauncher'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.flow
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.flow
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
