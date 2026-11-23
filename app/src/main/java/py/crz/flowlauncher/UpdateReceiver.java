@@ -22,7 +22,8 @@ public class UpdateReceiver extends BroadcastReceiver {
             }
         } else if (status != PackageInstaller.STATUS_SUCCESS) {
             String msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
-            Ui.toast(c, "La actualización no se instaló" + (msg == null ? "" : ": " + msg));
+            Ui.toast(c, "La actualización no se instaló (código " + status + ")"
+                    + (msg == null ? "" : ": " + msg) + ". Probá con Downloader.");
         }
     }
 }

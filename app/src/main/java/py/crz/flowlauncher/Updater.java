@@ -125,12 +125,14 @@ final class Updater {
         final Context app = a.getApplicationContext();
         new Thread(() -> {
             try {
-                File apk = new File(app.getCacheDir(), "update.apk");
+                File apk = ApkProvider.file(app);
                 HttpURLConnection con = (HttpURLConnection) new URL(r.apkUrl).openConnection();
                 con.setConnectTimeout(15000);
                 con.setReadTimeout(60000);
                 con.setInstanceFollowRedirects(true);
                 con.setRequestProperty("User-Agent", "FlowLauncher");
+                int code = con.getResponseCode();
+                if (code >= 300) throw new Exception("GitHub respondió " + code);
                 try (InputStream in = con.getInputStream(); OutputStream out = new FileOutputStream(apk)) {
                     byte[] buf = new byte[65536];
                     int n;
@@ -138,11 +140,59 @@ final class Updater {
                 } finally {
                     con.disconnect();
                 }
-                install(app, apk);
+                if (apk.length() < 10000) throw new Exception("el archivo descargado está incompleto");
+                a.runOnUiThread(() -> openInstaller(a, apk));
             } catch (Exception e) {
-                a.runOnUiThread(() -> Ui.toast(app, "No se pudo descargar: " + e.getMessage()));
+                a.runOnUiThread(() -> showError(a, "No se pudo descargar la actualización", e));
             }
         }).start();
+    }
+
+    /** Abre el instalador de Android, igual que hace Downloader. Si no se puede, usa el método interno. */
+    private static void openInstaller(Activity a, File apk) {
+        Exception first = null;
+        try {
+            Uri uri;
+            if (Build.VERSION.SDK_INT >= 24) {
+                uri = ApkProvider.uri();
+            } else {
+                // Android 6 o anterior: el instalador necesita un archivo legible
+                File ext = new File(a.getExternalFilesDir(null), "FlowLauncher.apk");
+                copy(apk, ext);
+                uri = Uri.fromFile(ext);
+            }
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, ApkProvider.MIME);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            a.startActivity(i);
+            return;
+        } catch (Exception e) {
+            first = e;
+        }
+        try {
+            install(a.getApplicationContext(), apk);
+        } catch (Exception e) {
+            showError(a, "No se pudo abrir el instalador", first != null ? first : e);
+        }
+    }
+
+    static void showError(Activity a, String title, Exception e) {
+        if (a.isFinishing()) return;
+        new AlertDialog.Builder(a)
+                .setTitle(title)
+                .setMessage("Detalle del error (sacale una foto y mandásela a Claude):\n\n"
+                        + e.getClass().getSimpleName() + ": " + e.getMessage()
+                        + "\n\nMientras tanto podés actualizar con Downloader usando el link de siempre.")
+                .setPositiveButton("Entendido", null)
+                .show();
+    }
+
+    private static void copy(File src, File dst) throws Exception {
+        try (InputStream in = new FileInputStream(src); OutputStream out = new FileOutputStream(dst)) {
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        }
     }
 
     private static void install(Context c, File apk) throws Exception {
