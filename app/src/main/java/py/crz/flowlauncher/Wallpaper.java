@@ -15,6 +15,42 @@ import java.io.InputStream;
 final class Wallpaper {
     private Wallpaper() {}
 
+    /** Imágenes incluidas en la app (res/drawable-nodpi/wp_N.jpg). Las 6 primeras van con cada tema. */
+    static final String[] BUILTIN_NAMES = {"Ondas azules", "Cielo estrellado", "Aurora", "Nebulosa",
+            "Atardecer", "Nubes suaves", "Bokeh dorado", "Océano"};
+
+    static int builtinRes(Context c, int index) {
+        return c.getResources().getIdentifier("wp_" + index, "drawable", c.getPackageName());
+    }
+
+    /** Carga una imagen incluida reduciéndola hasta maxWidth. */
+    static Bitmap loadBuiltin(Context c, int index, int maxWidth) {
+        int res = builtinRes(c, index);
+        if (res == 0) return null;
+        try {
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeResource(c.getResources(), res, o);
+            int sample = 1;
+            while (o.outWidth / (sample * 2) >= maxWidth) sample *= 2;
+            BitmapFactory.Options o2 = new BitmapFactory.Options();
+            o2.inSampleSize = sample;
+            o2.inPreferredConfig = Bitmap.Config.RGB_565;
+            return BitmapFactory.decodeResource(c.getResources(), res, o2);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /** Qué imagen corresponde según el modo: índice incluido (>=0), -1 = sin imagen, -2 = personalizada. */
+    static int resolve(Context c, Prefs p) {
+        String m = p.wallpaperMode();
+        if (Prefs.WP_CUSTOM.equals(m)) return file(c).exists() ? -2 : p.theme();
+        if (Prefs.WP_GRADIENT.equals(m)) return -1;
+        if (Prefs.WP_BUILTIN.equals(m)) return p.wallpaperBuiltin();
+        return p.theme(); // auto: la imagen del tema
+    }
+
     static File file(Context c) {
         return new File(c.getFilesDir(), "wallpaper.jpg");
     }

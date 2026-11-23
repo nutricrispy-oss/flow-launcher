@@ -10,8 +10,8 @@ android {
         applicationId "py.crz.flowlauncher"
         minSdk 21
         targetSdk 34
-        versionCode 2
-        versionName "1.1.0"
+        versionCode 3
+        versionName "1.2.0"
     }
 
     // Misma firma para todas las compilaciones (Android Studio o GitHub):

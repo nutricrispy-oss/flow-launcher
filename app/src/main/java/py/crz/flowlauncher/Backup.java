@@ -30,7 +30,7 @@ final class Backup {
         o.put("app", "FlowLauncher");
         o.put("formato", 1);
         o.put("fecha", new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(new Date()));
-        if (p.wallpaperImage()) {
+        if (Prefs.WP_CUSTOM.equals(p.wallpaperMode())) {
             byte[] w = Wallpaper.readBytes(c);
             if (w != null) o.put("wallpaper", Base64.encodeToString(w, Base64.NO_WRAP));
         }
@@ -45,7 +45,7 @@ final class Backup {
         p.fromJson(o);
         String w = o.optString("wallpaper", "");
         if (!w.isEmpty()) Wallpaper.saveBytes(c, Base64.decode(w, Base64.DEFAULT));
-        else p.setWallpaperImage(false);
+        else if (Prefs.WP_CUSTOM.equals(p.wallpaperMode())) p.setWallpaperMode(Prefs.WP_AUTO);
         HomeActivity.needsReload = true;
     }
 

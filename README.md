@@ -7,7 +7,7 @@ Launcher (pantalla de inicio) para Android TV, manejado 100 % con el control rem
 - **Inicio**: reloj grande, fecha en español, estado de la red e IP.
 - **Favoritos** (fila superior) que se pueden ordenar, y **todas las apps** en cuadrícula.
 - Banners de las apps de TV (YouTube, Netflix, etc.) o el ícono si la app no tiene banner.
-- **6 temas de colores**: Azul Flow, Noche, Esmeralda, Púrpura, Rojo y Claro.
+- **6 temas de colores** (Azul Flow, Noche, Esmeralda, Púrpura, Rojo y Claro), cada uno con su imagen de fondo, más 8 imágenes incluidas para elegir.
 - **Fondo personalizado**: imagen desde la galería, un pendrive USB o el explorador de archivos, con nivel de oscurecimiento.
 - **PIN de seguridad**: protege Ajustes, Mantenimiento y las apps que elijas (ideal para niños).
 - **Apps ocultas**, orden alfabético o por más usadas, 3 a 8 columnas, nombres siempre visibles o solo al seleccionar.

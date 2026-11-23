@@ -69,7 +69,7 @@ public class HomeActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private String lastFocusTag;
-    private long wallStamp = -1;
+    private String wallKey = "";
     private boolean loading;
 
     private final BroadcastReceiver packageReceiver = new BroadcastReceiver() {
@@ -302,20 +302,28 @@ public class HomeActivity extends Activity {
     private void applyTheme() {
         t = LauncherTheme.get(prefs.theme());
         root.setBackground(Ui.background(t));
+        int src = Wallpaper.resolve(this, prefs);
         File f = Wallpaper.file(this);
-        if (prefs.wallpaperImage() && f.exists()) {
-            if (f.lastModified() != wallStamp) {
-                Bitmap bm = Wallpaper.load(this, 1920);
-                wallImg.setImageBitmap(bm);
-                wallStamp = f.lastModified();
-            }
-            wallImg.setVisibility(View.VISIBLE);
-            dimView.setBackgroundColor(Color.argb(prefs.dim() * 255 / 100, 0, 0, 0));
-        } else {
+        String key = src == -2 ? "f" + f.lastModified() : "b" + src;
+        Bitmap bm = null;
+        if (src != -1 && !key.equals(wallKey)) {
+            bm = src == -2 ? Wallpaper.load(this, 1920) : Wallpaper.loadBuiltin(this, src, 1920);
+        }
+        if (src == -1 || (bm == null && !key.equals(wallKey))) {
             wallImg.setVisibility(View.GONE);
             wallImg.setImageDrawable(null);
-            wallStamp = -1;
+            wallKey = "";
             dimView.setBackgroundColor(Color.TRANSPARENT);
+        } else {
+            if (bm != null) {
+                wallImg.setImageBitmap(bm);
+                wallKey = key;
+            }
+            wallImg.setVisibility(View.VISIBLE);
+            // En el tema claro se aclara el fondo; en los oscuros se oscurece
+            int a = prefs.dim() * 255 / 100;
+            boolean lightTheme = Color.red(t.text) < 128;
+            dimView.setBackgroundColor(lightTheme ? Color.argb(a, 255, 255, 255) : Color.argb(a, 0, 0, 0));
         }
         clock.setTextColor(t.text);
         date.setTextColor(t.subtext);

@@ -39,8 +39,18 @@ final class Prefs {
     int dim() { return sp.getInt("dim", 30); }
     void setDim(int v) { sp.edit().putInt("dim", v).apply(); }
 
-    boolean wallpaperImage() { return sp.getBoolean("wall_img", false); }
-    void setWallpaperImage(boolean v) { sp.edit().putBoolean("wall_img", v).apply(); }
+    static final String WP_AUTO = "auto", WP_GRADIENT = "gradient", WP_BUILTIN = "builtin", WP_CUSTOM = "custom";
+
+    /** Fondo: auto = imagen del tema, gradient = solo colores, builtin = imagen incluida, custom = imagen propia */
+    String wallpaperMode() {
+        String m = sp.getString("wp_mode", null);
+        if (m == null) m = sp.getBoolean("wall_img", false) ? WP_CUSTOM : WP_AUTO;
+        return m;
+    }
+    void setWallpaperMode(String m) { sp.edit().putString("wp_mode", m).apply(); }
+
+    int wallpaperBuiltin() { return sp.getInt("wp_builtin", 0); }
+    void setWallpaperBuiltin(int i) { sp.edit().putString("wp_mode", WP_BUILTIN).putInt("wp_builtin", i).apply(); }
 
     boolean bootStart() { return sp.getBoolean("boot", false); }
     void setBootStart(boolean v) { sp.edit().putBoolean("boot", v).apply(); }
@@ -102,7 +112,8 @@ final class Prefs {
         o.put("labels", alwaysLabels());
         o.put("sort", sort());
         o.put("dim", dim());
-        o.put("wall_img", wallpaperImage());
+        o.put("wp_mode", wallpaperMode());
+        o.put("wp_builtin", wallpaperBuiltin());
         o.put("boot", bootStart());
         o.put("guard", guard());
         o.put("favorites", new JSONArray(favorites()));
@@ -120,7 +131,9 @@ final class Prefs {
         e.putBoolean("labels", o.optBoolean("labels", true));
         e.putString("sort", o.optString("sort", "az"));
         e.putInt("dim", o.optInt("dim", 30));
-        e.putBoolean("wall_img", o.optBoolean("wall_img", false));
+        String mode = o.optString("wp_mode", o.optBoolean("wall_img", false) ? WP_CUSTOM : WP_AUTO);
+        e.putString("wp_mode", mode);
+        e.putInt("wp_builtin", o.optInt("wp_builtin", 0));
         e.putBoolean("boot", o.optBoolean("boot", false));
         e.putBoolean("guard", o.optBoolean("guard", true));
         e.putString("favorites", arr(o, "favorites"));

@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import android.widget.LinearLayout;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -74,9 +75,11 @@ public class SettingsActivity extends BaseActivity {
 
         section("Apariencia");
         row("Tema de colores", t.name, this::chooseTheme);
-        row("Fondo de pantalla", prefs.wallpaperImage() ? "Imagen personalizada" : "Colores del tema",
-                this::chooseWallpaper);
-        row("Oscurecer el fondo", prefs.dim() + "%  (solo con imagen personalizada)", this::chooseDim);
+        row("Fondo de pantalla", wallpaperLabel(), this::chooseWallpaper);
+        row("Imágenes incluidas", Wallpaper.BUILTIN_NAMES.length + " fondos para elegir",
+                this::chooseBuiltin);
+        row("Suavizar el fondo", prefs.dim() + "%  (oscurece o aclara la imagen para leer mejor)",
+                this::chooseDim);
         row("Columnas de aplicaciones", prefs.columns() + " por fila", this::chooseColumns);
         row("Nombres de las apps", prefs.alwaysLabels() ? "Siempre visibles" : "Solo en la app seleccionada",
                 () -> {
@@ -157,16 +160,30 @@ public class SettingsActivity extends BaseActivity {
                 .show();
     }
 
+    private String wallpaperLabel() {
+        String m = prefs.wallpaperMode();
+        if (Prefs.WP_CUSTOM.equals(m)) return "Imagen personalizada";
+        if (Prefs.WP_GRADIENT.equals(m)) return "Solo colores del tema";
+        if (Prefs.WP_BUILTIN.equals(m)) {
+            int i = prefs.wallpaperBuiltin();
+            return "Imagen incluida: " + (i >= 0 && i < Wallpaper.BUILTIN_NAMES.length ? Wallpaper.BUILTIN_NAMES[i] : "");
+        }
+        return "Imagen del tema (cambia con el tema)";
+    }
+
     private void chooseWallpaper() {
-        String[] items = {"Usar colores del tema", "Elegir imagen de la galería / USB",
-                "Elegir imagen con el explorador de archivos"};
+        String[] items = {"Imagen del tema (cambia con el tema)", "Elegir de las imágenes incluidas",
+                "Solo colores del tema (sin imagen)", "Imagen propia: galería / USB",
+                "Imagen propia: explorador de archivos"};
         new AlertDialog.Builder(this)
                 .setTitle("Fondo de pantalla")
                 .setItems(items, (d, w) -> {
-                    if (w == 0) {
-                        prefs.setWallpaperImage(false);
+                    if (w == 0 || w == 2) {
+                        prefs.setWallpaperMode(w == 0 ? Prefs.WP_AUTO : Prefs.WP_GRADIENT);
                         render(focusedRow());
                     } else if (w == 1) {
+                        chooseBuiltin();
+                    } else if (w == 3) {
                         pickFromGallery();
                     } else {
                         pickWithFileManager();
@@ -175,16 +192,80 @@ public class SettingsActivity extends BaseActivity {
                 .show();
     }
 
+    /** Galería de imágenes incluidas con vista previa, navegable con el control. */
+    private void chooseBuiltin() {
+        final android.widget.GridLayout grid = new android.widget.GridLayout(this);
+        grid.setColumnCount(4);
+        int pad = Ui.dp(this, 16);
+        grid.setPadding(pad, pad, pad, pad);
+        grid.setClipChildren(false);
+        grid.setClipToPadding(false);
+        final android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.setClipChildren(false);
+        sv.addView(grid);
+        final AlertDialog d = new AlertDialog.Builder(this)
+                .setTitle("Imágenes incluidas")
+                .setView(sv)
+                .setNegativeButton("Cerrar", null)
+                .create();
+        int tw = Ui.dp(this, 150), th = tw * 9 / 16, m = Ui.dp(this, 8);
+        int current = Wallpaper.resolve(this, prefs);
+        android.view.View first = null;
+        for (int i = 0; i < Wallpaper.BUILTIN_NAMES.length; i++) {
+            final int idx = i;
+            final LinearLayout item = new LinearLayout(this);
+            item.setOrientation(LinearLayout.VERTICAL);
+            item.setFocusable(true);
+            item.setClickable(true);
+            final android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
+            final float r = Ui.dp(this, 8);
+            frame.setBackground(Ui.rounded(0x33FFFFFF, r, 0, 0));
+            frame.setClipToOutline(true);
+            android.widget.ImageView iv = new android.widget.ImageView(this);
+            iv.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+            iv.setImageBitmap(Wallpaper.loadBuiltin(this, i, 320));
+            frame.addView(iv, new android.widget.FrameLayout.LayoutParams(-1, -1));
+            if (i == current) frame.setForeground(Ui.rounded(0, r, Ui.dp(this, 2), 0xFFFFFFFF));
+            item.addView(frame, new LinearLayout.LayoutParams(tw, th));
+            final android.widget.TextView label = Ui.text(this, Wallpaper.BUILTIN_NAMES[i]
+                    + (i < LauncherTheme.ALL.length ? "\n(tema " + LauncherTheme.ALL[i].name + ")" : "\n "),
+                    13, 0xFFFFFFFF, false);
+            label.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            label.setPadding(0, Ui.dp(this, 4), 0, 0);
+            item.addView(label, new LinearLayout.LayoutParams(tw, -2));
+            final boolean isCurrent = i == current;
+            item.setOnFocusChangeListener((v, f) -> {
+                frame.setForeground(f ? Ui.rounded(0, r, Ui.dp(this, 4), t.accent)
+                        : (isCurrent ? Ui.rounded(0, r, Ui.dp(this, 2), 0xFFFFFFFF) : null));
+                Ui.focusAnim(item, f, 1.06f);
+            });
+            item.setOnClickListener(v -> {
+                prefs.setWallpaperBuiltin(idx);
+                d.dismiss();
+                Ui.toast(this, "Fondo: " + Wallpaper.BUILTIN_NAMES[idx]);
+                render(focusedRow());
+            });
+            android.widget.GridLayout.LayoutParams lp = new android.widget.GridLayout.LayoutParams();
+            lp.setMargins(m, m, m, m);
+            grid.addView(item, lp);
+            if (first == null || i == current) first = item;
+        }
+        d.show();
+        final android.view.View focus = first;
+        if (focus != null) focus.post(focus::requestFocus);
+    }
+
     private void chooseDim() {
         final int[] values = {0, 15, 30, 45, 60, 75};
+        // Nota: en el tema Claro aclara la imagen en vez de oscurecerla
         String[] labels = new String[values.length];
         int sel = 0;
         for (int i = 0; i < values.length; i++) {
-            labels[i] = values[i] == 0 ? "Sin oscurecer" : values[i] + "%";
+            labels[i] = values[i] == 0 ? "Sin suavizar" : values[i] + "%";
             if (values[i] == prefs.dim()) sel = i;
         }
         new AlertDialog.Builder(this)
-                .setTitle("Oscurecer el fondo")
+                .setTitle("Suavizar el fondo")
                 .setSingleChoiceItems(labels, sel, (d, w) -> {
                     prefs.setDim(values[w]);
                     d.dismiss();
@@ -286,7 +367,7 @@ public class SettingsActivity extends BaseActivity {
             final boolean ok = Wallpaper.saveFromUri(getApplicationContext(), uri);
             runOnUiThread(() -> {
                 if (ok) {
-                    prefs.setWallpaperImage(true);
+                    prefs.setWallpaperMode(Prefs.WP_CUSTOM);
                     Ui.toast(this, "Fondo de pantalla aplicado");
                 } else {
                     Ui.toast(this, "No se pudo usar esa imagen");
