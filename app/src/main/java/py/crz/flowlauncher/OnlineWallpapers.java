@@ -62,7 +62,10 @@ final class OnlineWallpapers {
 
     private static boolean isImage(String name) {
         String n = name.toLowerCase(Locale.US);
-        return n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") || n.endsWith(".webp");
+        if (n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") || n.endsWith(".webp")) return true;
+        // Archivos sin extensión (por ejemplo, renombrados en GitHub): se intenta igual
+        int dot = n.lastIndexOf('.');
+        return dot < 0 && !n.startsWith(".");
     }
 
     private static String localName(String name) {

@@ -329,24 +329,37 @@ public class SettingsActivity extends BaseActivity {
         void onPick(int index);
     }
 
-    /** Galería con vista previa, navegable con el control. */
+    /** Galería a pantalla completa con miniaturas, navegable con el control. */
     private void showImageGrid(String title, List<String> labels, List<android.graphics.Bitmap> thumbs,
                                int current, PickListener listener) {
+        final android.app.Dialog d = new android.app.Dialog(this,
+                android.R.style.Theme_Material_NoActionBar_Fullscreen);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackground(Ui.background(t));
+        int padH = Ui.dp(this, 48), padV = Ui.dp(this, 24);
+        page.setPadding(padH, padV, padH, padV);
+        page.setClipChildren(false);
+        page.addView(Ui.text(this, title, 26, t.text, true));
+        page.addView(Ui.text(this, "Elegí con las flechas y presioná OK  ·  Atrás para cerrar", 14, t.subtext, false));
+
+        final int cols = 5;
+        int screenW = getResources().getDisplayMetrics().widthPixels;
+        int m = Ui.dp(this, 8);
+        int tw = (screenW - 2 * padH) / cols - 2 * m;
+        int th = tw * 9 / 16;
+
         final android.widget.GridLayout grid = new android.widget.GridLayout(this);
-        grid.setColumnCount(4);
-        int pad = Ui.dp(this, 16);
-        grid.setPadding(pad, pad, pad, pad);
+        grid.setColumnCount(cols);
+        grid.setPadding(0, Ui.dp(this, 14), 0, Ui.dp(this, 14));
         grid.setClipChildren(false);
         grid.setClipToPadding(false);
         final android.widget.ScrollView sv = new android.widget.ScrollView(this);
         sv.setClipChildren(false);
+        sv.setClipToPadding(false);
         sv.addView(grid);
-        final AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle(title)
-                .setView(sv)
-                .setNegativeButton("Cerrar", null)
-                .create();
-        int tw = Ui.dp(this, 150), th = tw * 9 / 16, m = Ui.dp(this, 8);
+        page.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));
+
         android.view.View first = null;
         for (int i = 0; i < labels.size(); i++) {
             final int idx = i;
@@ -363,18 +376,19 @@ public class SettingsActivity extends BaseActivity {
             iv.setImageBitmap(thumbs.get(i));
             frame.addView(iv, new android.widget.FrameLayout.LayoutParams(-1, -1));
             final boolean isCurrent = i == current;
-            if (isCurrent) frame.setForeground(Ui.rounded(0, r, Ui.dp(this, 2), 0xFFFFFFFF));
+            if (isCurrent) frame.setForeground(Ui.rounded(0, r, Ui.dp(this, 2), t.text));
             item.addView(frame, new LinearLayout.LayoutParams(tw, th));
-            final android.widget.TextView label = Ui.text(this, labels.get(i), 13, 0xFFFFFFFF, false);
+            final android.widget.TextView label = Ui.text(this, labels.get(i), 12, t.subtext, false);
             label.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-            label.setMaxLines(2);
+            label.setSingleLine(true);
             label.setEllipsize(android.text.TextUtils.TruncateAt.END);
             label.setPadding(0, Ui.dp(this, 4), 0, 0);
             item.addView(label, new LinearLayout.LayoutParams(tw, -2));
             item.setOnFocusChangeListener((v, f) -> {
                 frame.setForeground(f ? Ui.rounded(0, r, Ui.dp(this, 4), t.accent)
-                        : (isCurrent ? Ui.rounded(0, r, Ui.dp(this, 2), 0xFFFFFFFF) : null));
-                Ui.focusAnim(item, f, 1.06f);
+                        : (isCurrent ? Ui.rounded(0, r, Ui.dp(this, 2), t.text) : null));
+                label.setTextColor(f ? t.text : t.subtext);
+                Ui.focusAnim(item, f, 1.08f);
             });
             item.setOnClickListener(v -> {
                 d.dismiss();
@@ -385,7 +399,13 @@ public class SettingsActivity extends BaseActivity {
             grid.addView(item, lp);
             if (first == null || i == current) first = item;
         }
+        d.setContentView(page);
         d.show();
+        if (d.getWindow() != null) {
+            d.getWindow().getDecorView().setSystemUiVisibility(
+                    android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        }
         final android.view.View focus = first;
         if (focus != null) focus.post(focus::requestFocus);
     }
@@ -395,7 +415,7 @@ public class SettingsActivity extends BaseActivity {
         List<android.graphics.Bitmap> thumbs = new ArrayList<>();
         for (int i = 0; i < Wallpaper.BUILTIN_NAMES.length; i++) {
             labels.add(Wallpaper.BUILTIN_NAMES[i]
-                    + (i < LauncherTheme.ALL.length ? "\n(tema " + LauncherTheme.ALL[i].name + ")" : ""));
+                    + (i < LauncherTheme.ALL.length ? " · " + LauncherTheme.ALL[i].name : ""));
             thumbs.add(Wallpaper.loadBuiltin(this, i, 320));
         }
         String m = prefs.wallpaperMode();
