@@ -117,6 +117,12 @@ final class Prefs {
     String fondosFolder() { return sp.getString("fondos_folder", OnlineWallpapers.FOLDER); }
     void setFondosFolder(String v) { sp.edit().putString("fondos_folder", v).apply(); }
 
+    /** Bloqueo de pantalla */
+    boolean screenLocked() { return sp.getBoolean("screen_locked", false); }
+    void setScreenLocked(boolean v) { sp.edit().putBoolean("screen_locked", v).commit(); }
+    boolean lockDoubleBack() { return sp.getBoolean("lock_double_back", true); }
+    void setLockDoubleBack(boolean v) { sp.edit().putBoolean("lock_double_back", v).apply(); }
+
     boolean favInit() { return sp.getBoolean("fav_init", false); }
     void setFavInit(boolean v) { sp.edit().putBoolean("fav_init", v).apply(); }
 
@@ -179,6 +185,7 @@ final class Prefs {
         o.put("weather", showWeather());
         o.put("recents_on", showRecents());
         o.put("cw_on", showContinue());
+        o.put("lock_double_back", lockDoubleBack());
         o.put("cw_file", cwFile());
         o.put("fondos_folder", fondosFolder());
         o.put("favorites", new JSONArray(favorites()));
@@ -209,6 +216,7 @@ final class Prefs {
         e.putBoolean("weather", o.optBoolean("weather", true));
         e.putBoolean("recents_on", o.optBoolean("recents_on", true));
         e.putBoolean("cw_on", o.optBoolean("cw_on", true));
+        e.putBoolean("lock_double_back", o.optBoolean("lock_double_back", true));
         e.putString("cw_file", o.optString("cw_file", ContinueWatching.FILE));
         e.putString("fondos_folder", o.optString("fondos_folder", OnlineWallpapers.FOLDER));
         e.putString("favorites", arr(o, "favorites"));

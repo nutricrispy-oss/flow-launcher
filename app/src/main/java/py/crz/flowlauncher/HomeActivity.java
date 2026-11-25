@@ -74,6 +74,7 @@ public class HomeActivity extends Activity {
     private TextView cwTitle;
     private AnalogClockView analog;
     private TextView btButton;
+    private long lastBackUp;
     private TextView wIcon, wTemp, wDetail;
     private int builtClockStyle = -1;
     private long lastClean, lastWeatherTry;
@@ -286,9 +287,29 @@ public class HomeActivity extends Activity {
         super.onDestroy();
     }
 
+    /** Bloquea el equipo. Si no hay PIN, primero pide crearlo (sin PIN cualquiera podría desbloquear). */
+    private void requestLock() {
+        if (prefs.hasPin()) {
+            LockActivity.lock(this);
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Bloquear la Flow Box")
+                .setMessage("Para que el bloqueo sirva, primero creá un PIN. Con ese PIN se desbloquea.")
+                .setPositiveButton("Crear PIN", (d, w) -> PinDialogs.create(this, prefs, () -> LockActivity.lock(this)))
+                .setNeutralButton("Bloquear sin PIN", (d, w) -> LockActivity.lock(this))
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        if (prefs.screenLocked()) {
+            // Sigue bloqueado (por ejemplo, después de apretar Inicio o de reiniciar)
+            LockActivity.lock(this);
+            return;
+        }
         Ui.immersive(this);
         applyTheme();
         updateClock();
@@ -500,7 +521,17 @@ public class HomeActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (isExitKey(event.getKeyCode())) {
-            if (event.getAction() == KeyEvent.ACTION_UP) goTop();
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                long now = android.os.SystemClock.uptimeMillis();
+                if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && prefs.lockDoubleBack()
+                        && now - lastBackUp < 650) {
+                    lastBackUp = 0;
+                    requestLock();
+                } else {
+                    lastBackUp = event.getKeyCode() == KeyEvent.KEYCODE_BACK ? now : 0;
+                    goTop();
+                }
+            }
             return true;
         }
         return super.dispatchKeyEvent(event);

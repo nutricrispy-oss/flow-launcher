@@ -159,6 +159,16 @@ public class SettingsActivity extends BaseActivity {
                 ? "Activado: protege Ajustes, Mantenimiento y las apps bloqueadas"
                 : "Desactivado", this::pinMenu);
 
+        row("Bloquear con «Atrás» dos veces", prefs.lockDoubleBack()
+                ? "Activado: en el inicio, apretá Atrás dos veces seguidas" : "Desactivado", () -> {
+            prefs.setLockDoubleBack(!prefs.lockDoubleBack());
+            render(focusedRow());
+        });
+        row("Bloquear ahora", prefs.hasPin() ? "Se desbloquea con el PIN" : "Sin PIN se desbloquea con OK", () -> {
+            LockActivity.lock(this);
+            finish();
+        });
+
         section("Copias de seguridad");
         row("Guardar copia en Descargas", "Incluye tema, favoritos, apps ocultas, PIN y fondo",
                 this::exportToDownloads);
