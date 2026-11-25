@@ -5,6 +5,7 @@ on:
     branches: [ main, master ]
     paths-ignore:
       - 'fondos/**'
+      - 'seguir-viendo.txt'
   workflow_dispatch:
 
 permissions:

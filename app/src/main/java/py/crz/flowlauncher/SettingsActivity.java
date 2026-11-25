@@ -84,6 +84,24 @@ public class SettingsActivity extends BaseActivity {
             prefs.setShowRecents(!prefs.showRecents());
             render(focusedRow());
         });
+        row("Fila «Seguir viendo»", prefs.showContinue()
+                ? ContinueWatching.list(this).size() + " acceso(s)  ·  desde «seguir-viendo.txt» en GitHub" : "Oculta",
+                () -> {
+                    prefs.setShowContinue(!prefs.showContinue());
+                    render(focusedRow());
+                });
+        row("Actualizar «Seguir viendo» ahora", "Lee otra vez el archivo de GitHub", () -> {
+            Ui.toast(this, "Actualizando…");
+            final String repo = prefs.fondosRepo();
+            executor.execute(() -> {
+                final ContinueWatching.Result r = ContinueWatching.sync(getApplicationContext(), repo);
+                runOnUiThread(() -> {
+                    prefs.setCwLastSync(System.currentTimeMillis());
+                    Ui.toast(this, r.error != null ? r.error : r.total + " acceso(s) cargado(s)");
+                    if (!isFinishing()) render(focusedRow());
+                });
+            });
+        });
         row("Borrar la lista de recientes", "La fila vuelve a llenarse a medida que abrís apps", () -> {
             prefs.clearRecents();
             Ui.toast(this, "Recientes borradas");

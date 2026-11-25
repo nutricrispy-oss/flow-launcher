@@ -104,6 +104,11 @@ final class Prefs {
     boolean wifiPermAsked() { return sp.getBoolean("wifi_perm", false); }
     void setWifiPermAsked(boolean v) { sp.edit().putBoolean("wifi_perm", v).apply(); }
 
+    boolean showContinue() { return sp.getBoolean("cw_on", true); }
+    void setShowContinue(boolean v) { sp.edit().putBoolean("cw_on", v).apply(); }
+    long cwLastSync() { return sp.getLong("cw_sync", 0); }
+    void setCwLastSync(long v) { sp.edit().putLong("cw_sync", v).apply(); }
+
     boolean favInit() { return sp.getBoolean("fav_init", false); }
     void setFavInit(boolean v) { sp.edit().putBoolean("fav_init", v).apply(); }
 
@@ -165,6 +170,7 @@ final class Prefs {
         o.put("icon_size", iconSize());
         o.put("weather", showWeather());
         o.put("recents_on", showRecents());
+        o.put("cw_on", showContinue());
         o.put("favorites", new JSONArray(favorites()));
         o.put("hidden", new JSONArray(hidden()));
         o.put("locked", new JSONArray(locked()));
@@ -192,6 +198,7 @@ final class Prefs {
         e.putInt("icon_size", o.optInt("icon_size", 1));
         e.putBoolean("weather", o.optBoolean("weather", true));
         e.putBoolean("recents_on", o.optBoolean("recents_on", true));
+        e.putBoolean("cw_on", o.optBoolean("cw_on", true));
         e.putString("favorites", arr(o, "favorites"));
         e.putString("hidden", arr(o, "hidden"));
         e.putString("locked", arr(o, "locked"));

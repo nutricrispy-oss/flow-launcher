@@ -56,6 +56,8 @@ public class HomeActivity extends Activity {
     static volatile boolean needsReload = true;
     /** Se pone en true al cambiar la ciudad del clima. */
     static volatile boolean weatherDirty = false;
+    /** Se pone en true para volver a leer «seguir-viendo.txt» de GitHub. */
+    static volatile boolean continueDirty = false;
 
     private Prefs prefs;
     private LauncherTheme t;
@@ -67,7 +69,9 @@ public class HomeActivity extends Activity {
     private GridLayout grid;
     private TextView clock, ampm, date, net, favTitle, allTitle, recTitle;
     private LinearLayout clockBox, weatherBox, recRow;
-    private HorizontalScrollView recScroll;
+    private HorizontalScrollView recScroll, cwScroll;
+    private LinearLayout cwRow;
+    private TextView cwTitle;
     private AnalogClockView analog;
     private TextView wIcon, wTemp, wDetail;
     private int builtClockStyle = -1;
@@ -211,6 +215,22 @@ public class HomeActivity extends Activity {
         recScroll.addView(recRow);
         content.addView(recScroll);
 
+        cwTitle = Ui.text(this, "SEGUIR VIENDO", 14, Color.WHITE, true);
+        cwTitle.setLetterSpacing(0.08f);
+        cwTitle.setPadding(Ui.dp(this, 10), Ui.dp(this, 6), 0, 0);
+        content.addView(cwTitle);
+        cwScroll = new HorizontalScrollView(this);
+        cwScroll.setHorizontalScrollBarEnabled(false);
+        cwScroll.setClipChildren(false);
+        cwScroll.setClipToPadding(false);
+        cwRow = new LinearLayout(this);
+        cwRow.setOrientation(LinearLayout.HORIZONTAL);
+        cwRow.setClipChildren(false);
+        cwRow.setClipToPadding(false);
+        cwRow.setPadding(0, Ui.dp(this, 12), Ui.dp(this, 24), Ui.dp(this, 12));
+        cwScroll.addView(cwRow);
+        content.addView(cwScroll);
+
         allTitle = Ui.text(this, "TODAS LAS APLICACIONES", 14, Color.WHITE, true);
         allTitle.setLetterSpacing(0.08f);
         allTitle.setPadding(Ui.dp(this, 10), Ui.dp(this, 10), 0, 0);
@@ -275,11 +295,99 @@ public class HomeActivity extends Activity {
         maybeShowHomeHint();
         updateWeather(weatherDirty);
         weatherDirty = false;
+        syncContinue();
         autoClean();
         autoUpdateCheck();
     }
 
     // ------------------------------------------------------------------ Tareas automáticas
+
+    /** Lee «seguir-viendo.txt» de GitHub cada 15 minutos (o al pedirlo desde Ajustes). */
+    private void syncContinue() {
+        if (!prefs.showContinue()) return;
+        long now = System.currentTimeMillis();
+        if (!continueDirty && now - prefs.cwLastSync() < 15 * 60 * 1000) return;
+        continueDirty = false;
+        prefs.setCwLastSync(now);
+        final Context app = getApplicationContext();
+        final String repo = prefs.fondosRepo();
+        try {
+            executor.execute(() -> {
+                ContinueWatching.sync(app, repo);
+                runOnUiThread(() -> {
+                    if (!isFinishing()) render();
+                });
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
+    private View makeContinueTile(final ContinueWatching.Entry e, int index, int w, int h) {
+        final LinearLayout tile = new LinearLayout(this);
+        tile.setOrientation(LinearLayout.VERTICAL);
+        tile.setFocusable(true);
+        tile.setClickable(true);
+        tile.setClipChildren(false);
+        tile.setTag("cw:" + index);
+        final float r = Ui.dp(this, 10);
+        final FrameLayout card = new FrameLayout(this);
+        card.setBackground(Ui.rounded(t.card, r, 0, 0));
+        card.setClipToOutline(true);
+        File thumbFile = ContinueWatching.thumb(this, e);
+        Bitmap thumb = thumbFile.exists() ? Wallpaper.decodeFile(thumbFile, 480) : null;
+        android.graphics.drawable.Drawable appIcon = ContinueWatching.appIcon(this, e);
+        if (thumb != null) {
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            iv.setImageBitmap(thumb);
+            card.addView(iv, new FrameLayout.LayoutParams(-1, -1));
+            if (appIcon != null) {
+                ImageView badge = new ImageView(this);
+                badge.setImageDrawable(appIcon);
+                int bs = Ui.dp(this, 24);
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(bs, bs, Gravity.BOTTOM | Gravity.START);
+                lp.setMargins(Ui.dp(this, 6), 0, 0, Ui.dp(this, 6));
+                card.addView(badge, lp);
+            }
+        } else {
+            ImageView iv = new ImageView(this);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            if (appIcon != null) iv.setImageDrawable(appIcon);
+            else iv.setImageResource(android.R.drawable.ic_media_play);
+            int s = Math.round(h * 0.5f);
+            card.addView(iv, new FrameLayout.LayoutParams(s, s, Gravity.CENTER));
+        }
+        TextView play = Ui.text(this, "▶", 14, Color.WHITE, true);
+        play.setPadding(Ui.dp(this, 7), Ui.dp(this, 2), Ui.dp(this, 7), Ui.dp(this, 2));
+        play.setBackground(Ui.rounded(0x99000000, Ui.dp(this, 8), 0, 0));
+        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+        plp.setMargins(0, Ui.dp(this, 6), Ui.dp(this, 6), 0);
+        card.addView(play, plp);
+        tile.addView(card, new LinearLayout.LayoutParams(w, h));
+
+        final TextView label = Ui.text(this, e.name, 14, t.subtext, false);
+        label.setSingleLine(true);
+        label.setEllipsize(TextUtils.TruncateAt.END);
+        label.setGravity(Gravity.CENTER_HORIZONTAL);
+        label.setPadding(0, Ui.dp(this, 6), 0, 0);
+        tile.addView(label, new LinearLayout.LayoutParams(w, -2));
+
+        tile.setOnFocusChangeListener((v, f) -> {
+            Ui.focusAnim(tile, f, 1.08f);
+            card.setForeground(f ? Ui.rounded(Color.TRANSPARENT, r, Ui.dp(this, 3), t.accent) : null);
+            label.setTextColor(f ? t.text : t.subtext);
+            label.setTypeface(f ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            if (f) lastFocusTag = (String) tile.getTag();
+        });
+        tile.setOnClickListener(v -> {
+            if (!ContinueWatching.open(this, e)) Ui.toast(this, "Ninguna app de este equipo abre ese link");
+        });
+        tile.setOnLongClickListener(v -> {
+            Ui.toast(this, "Para quitar o cambiar este acceso, editá «" + ContinueWatching.FILE + "» en GitHub");
+            return true;
+        });
+        return tile;
+    }
 
     private void autoClean() {
         if (!prefs.autoClean()) return;
@@ -445,6 +553,7 @@ public class HomeActivity extends Activity {
         wTemp.setTextColor(t.text);
         wDetail.setTextColor(t.subtext);
         recTitle.setTextColor(t.accent);
+        cwTitle.setTextColor(t.accent);
         net.setTextColor(t.subtext);
         favTitle.setTextColor(t.accent);
         allTitle.setTextColor(t.accent);
@@ -702,6 +811,21 @@ public class HomeActivity extends Activity {
         }
         recTitle.setVisibility(recCount > 0 ? View.VISIBLE : View.GONE);
         recScroll.setVisibility(recCount > 0 ? View.VISIBLE : View.GONE);
+
+        // Seguir viendo
+        cwRow.removeAllViews();
+        int cwCount = 0;
+        if (prefs.showContinue()) {
+            List<ContinueWatching.Entry> entries = ContinueWatching.list(this);
+            for (int i = 0; i < entries.size(); i++) {
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(tileW, -2);
+                lp.setMargins(gap / 2, 0, gap / 2, 0);
+                cwRow.addView(makeContinueTile(entries.get(i), i, tileW, tileH), lp);
+                cwCount++;
+            }
+        }
+        cwTitle.setVisibility(cwCount > 0 ? View.VISIBLE : View.GONE);
+        cwScroll.setVisibility(cwCount > 0 ? View.VISIBLE : View.GONE);
 
         // Todas las apps
         List<AppItem> visible = new ArrayList<>();

@@ -1,0 +1,16 @@
+# SEGUIR VIENDO — accesos directos para Flow Launcher
+#
+# Una línea por acceso:   Nombre | link
+# Opcional, con imagen:   Nombre | link | link-de-una-imagen
+#
+# Las líneas que empiezan con # no se muestran (son ayuda).
+# Los videos de YouTube traen su miniatura solos.
+# Para que YouTube arranque en un minuto exacto, agregá &t=1234s al link.
+#
+# Ejemplos (borrá el # del principio y cambiá los links por los tuyos):
+# Mi lista de música | https://www.youtube.com/playlist?list=XXXXXXXX
+# Video pendiente    | https://www.youtube.com/watch?v=XXXXXXXXXXX&t=600s
+# Mi serie           | https://www.netflix.com/title/00000000
+# Playlist Spotify   | https://open.spotify.com/playlist/XXXXXXXX
+#
+# Escribí tus accesos debajo de esta línea:
