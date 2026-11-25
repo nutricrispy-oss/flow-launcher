@@ -287,19 +287,9 @@ public class HomeActivity extends Activity {
         super.onDestroy();
     }
 
-    /** Bloquea el equipo. Si no hay PIN, primero pide crearlo (sin PIN cualquiera podría desbloquear). */
+    /** Bloquea el equipo directamente (sin PIN, se desbloquea con OK). */
     private void requestLock() {
-        if (prefs.hasPin()) {
-            LockActivity.lock(this);
-            return;
-        }
-        new AlertDialog.Builder(this)
-                .setTitle("Bloquear la Flow Box")
-                .setMessage("Para que el bloqueo sirva, primero creá un PIN. Con ese PIN se desbloquea.")
-                .setPositiveButton("Crear PIN", (d, w) -> PinDialogs.create(this, prefs, () -> LockActivity.lock(this)))
-                .setNeutralButton("Bloquear sin PIN", (d, w) -> LockActivity.lock(this))
-                .setNegativeButton("Cancelar", null)
-                .show();
+        LockActivity.lock(this);
     }
 
     @Override
