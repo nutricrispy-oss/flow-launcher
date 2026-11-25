@@ -85,7 +85,7 @@ public class SettingsActivity extends BaseActivity {
             render(focusedRow());
         });
         row("Fila «Seguir viendo»", prefs.showContinue()
-                ? ContinueWatching.list(this).size() + " acceso(s)  ·  desde «seguir-viendo.txt» en GitHub" : "Oculta",
+                ? ContinueWatching.list(this).size() + " acceso(s)  ·  archivo «" + prefs.cwFile() + "»" : "Oculta",
                 () -> {
                     prefs.setShowContinue(!prefs.showContinue());
                     render(focusedRow());
@@ -94,7 +94,8 @@ public class SettingsActivity extends BaseActivity {
             Ui.toast(this, "Actualizando…");
             final String repo = prefs.fondosRepo();
             executor.execute(() -> {
-                final ContinueWatching.Result r = ContinueWatching.sync(getApplicationContext(), repo);
+                final ContinueWatching.Result r = ContinueWatching.sync(getApplicationContext(), repo,
+                        prefs.cwFile());
                 runOnUiThread(() -> {
                     prefs.setCwLastSync(System.currentTimeMillis());
                     Ui.toast(this, r.error != null ? r.error : r.total + " acceso(s) cargado(s)");
@@ -102,6 +103,12 @@ public class SettingsActivity extends BaseActivity {
                 });
             });
         });
+        row("Archivo de «Seguir viendo» de este equipo", prefs.cwFile(),
+                () -> editName("Archivo de «Seguir viendo»", prefs.cwFile(), ContinueWatching.FILE, ".txt", v -> {
+                    prefs.setCwFile(v);
+                    prefs.setCwLastSync(0);
+                    HomeActivity.continueDirty = true;
+                }));
         row("Borrar la lista de recientes", "La fila vuelve a llenarse a medida que abrís apps", () -> {
             prefs.clearRecents();
             Ui.toast(this, "Recientes borradas");
@@ -114,7 +121,9 @@ public class SettingsActivity extends BaseActivity {
                 this::chooseBuiltin);
         int mine = OnlineWallpapers.list(this).size();
         row("Mis fondos de GitHub", (mine == 0 ? "Ninguno descargado todavía" : mine + " descargado(s)")
-                + "  ·  carpeta «fondos» del repositorio  ·  tocá para actualizar", this::chooseOnline);
+                + "  ·  carpeta «" + prefs.fondosFolder() + "»  ·  tocá para actualizar", this::chooseOnline);
+        row("Carpeta de fondos de este equipo", prefs.fondosFolder(),
+                () -> editName("Carpeta de fondos", prefs.fondosFolder(), OnlineWallpapers.FOLDER, "", prefs::setFondosFolder));
         row("Repositorio de mis fondos", "github.com/" + prefs.fondosRepo(), this::editRepo);
         row("Suavizar el fondo", prefs.dim() + "%  (oscurece o aclara la imagen para leer mejor)",
                 this::chooseDim);
@@ -451,7 +460,8 @@ public class SettingsActivity extends BaseActivity {
         Ui.toast(this, "Buscando fondos en GitHub…");
         final String repo = prefs.fondosRepo();
         executor.execute(() -> {
-            final OnlineWallpapers.Result r = OnlineWallpapers.sync(getApplicationContext(), repo);
+            final OnlineWallpapers.Result r = OnlineWallpapers.sync(getApplicationContext(), repo,
+                    prefs.fondosFolder());
             final List<java.io.File> files = OnlineWallpapers.list(getApplicationContext());
             final List<String> labels = new ArrayList<>();
             final List<android.graphics.Bitmap> thumbs = new ArrayList<>();
@@ -471,7 +481,7 @@ public class SettingsActivity extends BaseActivity {
                     new AlertDialog.Builder(this)
                             .setTitle("Todavía no hay fondos")
                             .setMessage("Subí imágenes (.jpg, .png o .webp) a la carpeta «"
-                                    + OnlineWallpapers.FOLDER + "» del repositorio:\n\n" + "github.com/" + repo
+                                    + prefs.fondosFolder() + "» del repositorio:\n\n" + "github.com/" + repo
                                     + "\n\nDespués volvé a tocar esta opción.")
                             .setPositiveButton("Entendido", null)
                             .show();
@@ -495,6 +505,40 @@ public class SettingsActivity extends BaseActivity {
                 });
             });
         });
+    }
+
+    interface NameCallback {
+        void onName(String v);
+    }
+
+    /** Pide un nombre de archivo o carpeta del repositorio (para que cada equipo tenga el suyo). */
+    private void editName(String title, String current, String def, String ext, NameCallback cb) {
+        final android.widget.EditText et = new android.widget.EditText(this);
+        et.setSingleLine(true);
+        et.setText(current);
+        et.setSelection(et.getText().length());
+        android.widget.FrameLayout wrap = new android.widget.FrameLayout(this);
+        int pad = Ui.dp(this, 24);
+        wrap.setPadding(pad, Ui.dp(this, 8), pad, 0);
+        wrap.addView(et);
+        new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage("Tiene que ser igual al nombre en GitHub. Por defecto: " + def)
+                .setView(wrap)
+                .setPositiveButton("Guardar", (d, w) -> {
+                    String v = et.getText().toString().trim().replace(" ", "-");
+                    if (v.isEmpty()) v = def;
+                    if (!ext.isEmpty() && !v.toLowerCase().endsWith(ext)) v += ext;
+                    cb.onName(v);
+                    Ui.toast(this, "Guardado: " + v);
+                    render(focusedRow());
+                })
+                .setNeutralButton("Por defecto", (d, w) -> {
+                    cb.onName(def);
+                    render(focusedRow());
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
     }
 
     private void editRepo() {

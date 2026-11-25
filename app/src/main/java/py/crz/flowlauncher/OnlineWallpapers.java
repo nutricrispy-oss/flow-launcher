@@ -75,11 +75,11 @@ final class OnlineWallpapers {
     }
 
     /** Descarga las nuevas o cambiadas y borra las que ya no están en GitHub. */
-    static Result sync(Context c, String repo) {
+    static Result sync(Context c, String repo, String folder) {
         Result r = new Result();
         File dir = dir(c);
         try {
-            String api = "https://api.github.com/repos/" + repo.trim() + "/contents/" + FOLDER;
+            String api = "https://api.github.com/repos/" + repo.trim() + "/contents/" + folder;
             JSONArray arr = new JSONArray(httpGetText(api));
             Set<String> keep = new HashSet<>();
             for (int i = 0; i < arr.length(); i++) {
@@ -117,7 +117,7 @@ final class OnlineWallpapers {
             }
             r.total = keep.size();
         } catch (FileNotFoundException e) {
-            r.error = "No se encontró la carpeta «" + FOLDER + "» en " + repo;
+            r.error = "No se encontró la carpeta «" + folder + "» en " + repo;
         } catch (Exception e) {
             r.error = "No se pudo conectar (" + e.getMessage() + ")";
         }

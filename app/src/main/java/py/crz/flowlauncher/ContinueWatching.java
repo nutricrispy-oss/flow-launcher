@@ -79,10 +79,10 @@ final class ContinueWatching {
     }
 
     /** Lee el archivo de GitHub, guarda la lista y descarga las miniaturas. Fuera del hilo principal. */
-    static Result sync(Context c, String repo) {
+    static Result sync(Context c, String repo, String file) {
         Result r = new Result();
         try {
-            String api = "https://api.github.com/repos/" + repo.trim() + "/contents/" + FILE;
+            String api = "https://api.github.com/repos/" + repo.trim() + "/contents/" + file;
             JSONObject o = new JSONObject(get(api));
             String text = new String(Base64.decode(o.optString("content", ""), Base64.DEFAULT), "UTF-8");
             List<Entry> entries = parse(text);
@@ -114,7 +114,7 @@ final class ContinueWatching {
             }
             r.total = entries.size();
         } catch (FileNotFoundException e) {
-            r.error = "No existe el archivo «" + FILE + "» en " + repo;
+            r.error = "No existe el archivo «" + file + "» en " + repo;
         } catch (Exception e) {
             r.error = "No se pudo conectar (" + e.getMessage() + ")";
         }

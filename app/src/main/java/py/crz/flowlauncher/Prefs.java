@@ -109,6 +109,14 @@ final class Prefs {
     long cwLastSync() { return sp.getLong("cw_sync", 0); }
     void setCwLastSync(long v) { sp.edit().putLong("cw_sync", v).apply(); }
 
+    /** Archivo de «Seguir viendo» de ESTE equipo (cada Flow Box puede tener el suyo). */
+    String cwFile() { return sp.getString("cw_file", ContinueWatching.FILE); }
+    void setCwFile(String v) { sp.edit().putString("cw_file", v).apply(); }
+
+    /** Carpeta de fondos de ESTE equipo. */
+    String fondosFolder() { return sp.getString("fondos_folder", OnlineWallpapers.FOLDER); }
+    void setFondosFolder(String v) { sp.edit().putString("fondos_folder", v).apply(); }
+
     boolean favInit() { return sp.getBoolean("fav_init", false); }
     void setFavInit(boolean v) { sp.edit().putBoolean("fav_init", v).apply(); }
 
@@ -171,6 +179,8 @@ final class Prefs {
         o.put("weather", showWeather());
         o.put("recents_on", showRecents());
         o.put("cw_on", showContinue());
+        o.put("cw_file", cwFile());
+        o.put("fondos_folder", fondosFolder());
         o.put("favorites", new JSONArray(favorites()));
         o.put("hidden", new JSONArray(hidden()));
         o.put("locked", new JSONArray(locked()));
@@ -199,6 +209,8 @@ final class Prefs {
         e.putBoolean("weather", o.optBoolean("weather", true));
         e.putBoolean("recents_on", o.optBoolean("recents_on", true));
         e.putBoolean("cw_on", o.optBoolean("cw_on", true));
+        e.putString("cw_file", o.optString("cw_file", ContinueWatching.FILE));
+        e.putString("fondos_folder", o.optString("fondos_folder", OnlineWallpapers.FOLDER));
         e.putString("favorites", arr(o, "favorites"));
         e.putString("hidden", arr(o, "hidden"));
         e.putString("locked", arr(o, "locked"));

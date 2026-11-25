@@ -311,9 +311,10 @@ public class HomeActivity extends Activity {
         prefs.setCwLastSync(now);
         final Context app = getApplicationContext();
         final String repo = prefs.fondosRepo();
+        final String file = prefs.cwFile();
         try {
             executor.execute(() -> {
-                ContinueWatching.sync(app, repo);
+                ContinueWatching.sync(app, repo, file);
                 runOnUiThread(() -> {
                     if (!isFinishing()) render();
                 });
@@ -383,7 +384,7 @@ public class HomeActivity extends Activity {
             if (!ContinueWatching.open(this, e)) Ui.toast(this, "Ninguna app de este equipo abre ese link");
         });
         tile.setOnLongClickListener(v -> {
-            Ui.toast(this, "Para quitar o cambiar este acceso, editá «" + ContinueWatching.FILE + "» en GitHub");
+            Ui.toast(this, "Para quitar o cambiar este acceso, editá «" + prefs.cwFile() + "» en GitHub");
             return true;
         });
         return tile;
