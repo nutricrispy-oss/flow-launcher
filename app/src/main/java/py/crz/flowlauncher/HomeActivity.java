@@ -73,6 +73,7 @@ public class HomeActivity extends Activity {
     private LinearLayout cwRow;
     private TextView cwTitle;
     private AnalogClockView analog;
+    private TextView btButton;
     private TextView wIcon, wTemp, wDetail;
     private int builtClockStyle = -1;
     private long lastClean, lastWeatherTry;
@@ -97,6 +98,7 @@ public class HomeActivity extends Activity {
         public void onReceive(Context c, Intent i) {
             updateClock();
             updateNet();
+            updateBtLabel();
         }
     };
 
@@ -259,6 +261,9 @@ public class HomeActivity extends Activity {
         sf.addAction(Intent.ACTION_TIME_CHANGED);
         sf.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         sf.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+        sf.addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED);
+        sf.addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED);
+        sf.addAction(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED);
         register(systemReceiver, sf);
     }
 
@@ -563,6 +568,9 @@ public class HomeActivity extends Activity {
 
     private void buildButtons() {
         buttonBox.removeAllViews();
+        btButton = addHeaderButton("Bluetooth", "btn:bt",
+                () -> startActivity(new Intent(this, BluetoothActivity.class)));
+        updateBtLabel();
         addHeaderButton("Ajustes", "btn:settings", () -> PinDialogs.require(this, prefs, null,
                 () -> startActivity(new Intent(this, SettingsActivity.class))));
         addHeaderButton("Mantenimiento", "btn:maint", () -> PinDialogs.require(this, prefs, null,
@@ -571,7 +579,17 @@ public class HomeActivity extends Activity {
                 Settings.ACTION_SETTINGS));
     }
 
-    private void addHeaderButton(String label, String tag, Runnable action) {
+    /** Muestra cuántos dispositivos Bluetooth hay conectados (con un pequeño retraso para que Android actualice). */
+    private void updateBtLabel() {
+        if (btButton == null) return;
+        handler.postDelayed(() -> {
+            if (btButton == null) return;
+            int n = BluetoothActivity.connectedCount(this);
+            btButton.setText(n > 0 ? "Bluetooth · " + n : "Bluetooth");
+        }, 700);
+    }
+
+    private TextView addHeaderButton(String label, String tag, Runnable action) {
         TextView b = Ui.button(this, t, label, action);
         b.setTag(tag);
         b.setTextSize(13);
@@ -583,6 +601,7 @@ public class HomeActivity extends Activity {
             if (f) lastFocusTag = (String) v.getTag();
         });
         buttonBox.addView(b);
+        return b;
     }
 
     // ------------------------------------------------------------------ Reloj y red
