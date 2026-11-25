@@ -129,6 +129,16 @@ public class SettingsActivity extends BaseActivity {
                 this::chooseDim);
         row("Tamaño de los íconos", ICON_SIZES[Math.max(0, Math.min(3, prefs.iconSize()))]
                 + "  (apps sin banner de TV)", this::chooseIconSize);
+        final String[] effects = {"Sin atenuación", "Suave (recomendado)", "Intenso"};
+        row("Efecto al seleccionar", effects[Math.max(0, Math.min(2, prefs.focusEffect()))]
+                + "  ·  atenúa las apps no seleccionadas", () -> new AlertDialog.Builder(this)
+                .setTitle("Efecto al seleccionar")
+                .setSingleChoiceItems(effects, prefs.focusEffect(), (d, w) -> {
+                    prefs.setFocusEffect(w);
+                    d.dismiss();
+                    render(focusedRow());
+                })
+                .show());
         row("Columnas de aplicaciones", prefs.columns() + " por fila", this::chooseColumns);
         row("Nombres de las apps", prefs.alwaysLabels() ? "Siempre visibles" : "Solo en la app seleccionada",
                 () -> {

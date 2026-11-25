@@ -123,6 +123,10 @@ final class Prefs {
     boolean lockDoubleBack() { return sp.getBoolean("lock_double_back", true); }
     void setLockDoubleBack(boolean v) { sp.edit().putBoolean("lock_double_back", v).apply(); }
 
+    /** Efecto al seleccionar: 0 sin atenuar, 1 suave, 2 intenso */
+    int focusEffect() { return sp.getInt("focus_effect", 1); }
+    void setFocusEffect(int v) { sp.edit().putInt("focus_effect", v).apply(); }
+
     boolean favInit() { return sp.getBoolean("fav_init", false); }
     void setFavInit(boolean v) { sp.edit().putBoolean("fav_init", v).apply(); }
 
@@ -185,6 +189,7 @@ final class Prefs {
         o.put("weather", showWeather());
         o.put("recents_on", showRecents());
         o.put("cw_on", showContinue());
+        o.put("focus_effect", focusEffect());
         o.put("lock_double_back", lockDoubleBack());
         o.put("cw_file", cwFile());
         o.put("fondos_folder", fondosFolder());
@@ -216,6 +221,7 @@ final class Prefs {
         e.putBoolean("weather", o.optBoolean("weather", true));
         e.putBoolean("recents_on", o.optBoolean("recents_on", true));
         e.putBoolean("cw_on", o.optBoolean("cw_on", true));
+        e.putInt("focus_effect", o.optInt("focus_effect", 1));
         e.putBoolean("lock_double_back", o.optBoolean("lock_double_back", true));
         e.putString("cw_file", o.optString("cw_file", ContinueWatching.FILE));
         e.putString("fondos_folder", o.optString("fondos_folder", OnlineWallpapers.FOLDER));

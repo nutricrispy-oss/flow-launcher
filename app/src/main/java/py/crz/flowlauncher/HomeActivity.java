@@ -398,9 +398,10 @@ public class HomeActivity extends Activity {
         label.setGravity(Gravity.CENTER_HORIZONTAL);
         label.setPadding(0, Ui.dp(this, 6), 0, 0);
         tile.addView(label, new LinearLayout.LayoutParams(w, -2));
+        tile.setAlpha(Ui.restAlpha(prefs.focusEffect()));
 
         tile.setOnFocusChangeListener((v, f) -> {
-            Ui.focusAnim(tile, f, 1.08f);
+            Ui.tileFocus(tile, card, f, t.accent, prefs.focusEffect());
             card.setForeground(f ? Ui.rounded(Color.TRANSPARENT, r, Ui.dp(this, 3), t.accent) : null);
             label.setTextColor(f ? t.text : t.subtext);
             label.setTypeface(f ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
@@ -966,9 +967,10 @@ public class HomeActivity extends Activity {
         label.setPadding(0, Ui.dp(this, 6), 0, 0);
         label.setVisibility(always ? View.VISIBLE : View.INVISIBLE);
         tile.addView(label, new LinearLayout.LayoutParams(w, -2));
+        tile.setAlpha(Ui.restAlpha(prefs.focusEffect()));
 
         tile.setOnFocusChangeListener((v, f) -> {
-            Ui.focusAnim(tile, f, 1.08f);
+            Ui.tileFocus(tile, card, f, t.accent, prefs.focusEffect());
             card.setForeground(f ? Ui.rounded(Color.TRANSPARENT, r, Ui.dp(this, 3), t.accent) : null);
             label.setTextColor(f ? t.text : t.subtext);
             label.setTypeface(f ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);

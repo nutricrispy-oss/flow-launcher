@@ -54,6 +54,32 @@ final class Ui {
         v.setTranslationZ(focused ? dp(v.getContext(), 6) : 0);
     }
 
+    /** Opacidad de las apps NO seleccionadas según el efecto elegido. */
+    static float restAlpha(int effect) {
+        return effect == 0 ? 1f : effect == 2 ? 0.5f : 0.72f;
+    }
+
+    /**
+     * Efecto "pro" al seleccionar una app: las demás quedan atenuadas, la elegida se ilumina,
+     * crece con un pequeño rebote y proyecta un brillo del color del tema.
+     */
+    static void tileFocus(View tile, View card, boolean f, int accent, int effect) {
+        float scale = effect == 2 ? 1.12f : 1.10f;
+        tile.animate()
+                .scaleX(f ? scale : 1f).scaleY(f ? scale : 1f)
+                .alpha(f ? 1f : restAlpha(effect))
+                .setDuration(f ? 260 : 180)
+                .setInterpolator(f ? new android.view.animation.OvershootInterpolator(1.6f)
+                        : new android.view.animation.DecelerateInterpolator())
+                .start();
+        tile.setTranslationZ(f ? dp(tile.getContext(), 10) : 0);
+        card.setElevation(f ? dp(card.getContext(), 14) : 0);
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            card.setOutlineAmbientShadowColor(accent);
+            card.setOutlineSpotShadowColor(accent);
+        }
+    }
+
     /** Fila grande de menú (título + subtítulo) que se resalta al seleccionarla. */
     static LinearLayout row(Context c, LauncherTheme t, String title, String sub, Runnable action) {
         final LinearLayout r = new LinearLayout(c);
